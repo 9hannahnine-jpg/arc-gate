@@ -117,17 +117,27 @@ _FR_KNOWN_ATTACKS = [
 ]
 
 def _prompt_to_dist(prompt_text):
+    """Three signals from one forward pass:
+    (last_dist, perplexity, trajectory_fr)
+    last_dist: last-position logits - full causal context, most discriminative
+    perplexity: exp(NLL) - unusual token sequences score higher
+    trajectory_fr: FR(first_pos, last_pos) - D(t) on prompt manifold (Nine 2026)"""
     if _fr_lm_model is None or _fr_lm_tokenizer is None: return None
     try:
         ids = _fr_lm_tokenizer.encode(
             prompt_text[:300], return_tensors="pt",
             truncation=True, max_length=_FR_LM_MAXLEN
         )
+        if ids.shape[1] < 2: return None
         with torch.no_grad():
-            out = _fr_lm_model(ids)
-        logits = out.logits[0].mean(0)
-        dist = torch.softmax(logits, dim=0)
-        return dist
+            out = _fr_lm_model(ids, labels=ids)
+        logits = out.logits[0]
+        last_dist  = torch.softmax(logits[-1], dim=0)
+        first_dist = torch.softmax(logits[0],  dim=0)
+        perplexity = float(torch.exp(out.loss).item())
+        bc = torch.sum(torch.sqrt(first_dist) * torch.sqrt(last_dist)).clamp(-1+1e-7, 1-1e-7)
+        trajectory_fr = 2.0 * torch.arccos(bc).item()
+        return last_dist, perplexity, trajectory_fr
     except Exception as e:
         print(f"[FR_LM] forward pass error: {e}")
         return None
@@ -151,126 +161,76 @@ def _load_inj_model():
             )
             _fr_lm_model.eval()
             print("[FR_LM] Model loaded. Building FR baseline...")
-            clean_dists = [d for d in (_prompt_to_dist(p) for p in _FR_CLEAN_PROMPTS) if d is not None]
-            if len(clean_dists) < 5:
+            global _fr_ppl_threshold, _fr_traj_threshold, _fr_ppl_mean, _fr_ppl_std, _fr_traj_mean, _fr_traj_std
+            clean_results = [r for r in (_prompt_to_dist(p) for p in _FR_CLEAN_PROMPTS) if r is not None]
+            if len(clean_results) < 5:
                 print("[FR_LM] Not enough clean embeddings"); return
-            sqrt_stack = torch.stack([torch.sqrt(d) for d in clean_dists])
-            mean_sqrt = sqrt_stack.mean(0)
-            mean_sqrt = mean_sqrt / mean_sqrt.norm()
-            centroid = mean_sqrt ** 2
-            centroid = centroid / centroid.sum()
+            clean_last  = [r[0] for r in clean_results]
+            clean_ppls  = [r[1] for r in clean_results]
+            clean_trajs = [r[2] for r in clean_results]
+            sqrt_stack = torch.stack([torch.sqrt(d) for d in clean_last])
+            mean_sqrt  = sqrt_stack.mean(0); mean_sqrt = mean_sqrt / mean_sqrt.norm()
+            centroid   = mean_sqrt ** 2; centroid = centroid / centroid.sum()
             _fr_lm_centroid = centroid
-            clean_fr = [_fr_dist_lm(d, centroid) for d in clean_dists]
-            _fr_lm_mean = float(torch.tensor(clean_fr).mean())
-            _fr_lm_std  = float(torch.tensor(clean_fr).std()) + 1e-8
-            clean_max   = max(clean_fr)
-            attack_dists = [d for d in (_prompt_to_dist(p) for p in _FR_KNOWN_ATTACKS) if d is not None]
-            if attack_dists:
-                attack_fr  = [_fr_dist_lm(d, centroid) for d in attack_dists]
-                attack_min = min(attack_fr)
-                attack_mean = float(torch.tensor(attack_fr).mean())
-                _fr_lm_threshold = clean_max + (attack_min - clean_max) * 0.3
-                print(f"[FR_LM] clean_max={clean_max:.4f} attack_min={attack_min:.4f} attack_mean={attack_mean:.4f} threshold={_fr_lm_threshold:.4f}")
+            clean_fr = [_fr_dist_lm(d, centroid) for d in clean_last]
+            _fr_lm_mean     = float(torch.tensor(clean_fr).mean())
+            _fr_lm_std      = float(torch.tensor(clean_fr).std()) + 1e-8
+            clean_fr_max    = max(clean_fr)
+            clean_ppl_mean  = float(torch.tensor(clean_ppls).mean())
+            clean_ppl_std   = float(torch.tensor(clean_ppls).std()) + 1e-8
+            clean_ppl_max   = max(clean_ppls)
+            clean_traj_mean = float(torch.tensor(clean_trajs).mean())
+            clean_traj_std  = float(torch.tensor(clean_trajs).std()) + 1e-8
+            clean_traj_max  = max(clean_trajs)
+            _fr_ppl_mean = clean_ppl_mean; _fr_ppl_std = clean_ppl_std
+            _fr_traj_mean = clean_traj_mean; _fr_traj_std = clean_traj_std
+            print(f"[FR_LM] Clean: fr_max={clean_fr_max:.4f} ppl_max={clean_ppl_max:.1f} traj_max={clean_traj_max:.4f}")
+            attack_results = [r for r in (_prompt_to_dist(p) for p in _FR_KNOWN_ATTACKS) if r is not None]
+            if attack_results:
+                attack_last  = [r[0] for r in attack_results]
+                attack_ppls  = [r[1] for r in attack_results]
+                attack_trajs = [r[2] for r in attack_results]
+                attack_fr    = [_fr_dist_lm(d, centroid) for d in attack_last]
+                attack_fr_min   = min(attack_fr)
+                attack_ppl_min  = min(attack_ppls)
+                attack_traj_min = min(attack_trajs)
+                _fr_lm_threshold   = clean_fr_max + (attack_fr_min - clean_fr_max) * 0.3
+                _fr_ppl_threshold  = (clean_ppl_max + (attack_ppl_min - clean_ppl_max) * 0.3
+                                      if attack_ppl_min > clean_ppl_max
+                                      else clean_ppl_mean + 4.0 * clean_ppl_std)
+                _fr_traj_threshold = (clean_traj_max + (attack_traj_min - clean_traj_max) * 0.3
+                                      if attack_traj_min > clean_traj_max
+                                      else clean_traj_mean + 4.0 * clean_traj_std)
+                print(f"[FR_LM] Attack: fr_min={attack_fr_min:.4f} ppl_min={attack_ppl_min:.1f} traj_min={attack_traj_min:.4f}")
+                print(f"[FR_LM] Thresholds: fr={_fr_lm_threshold:.4f} ppl={_fr_ppl_threshold:.1f} traj={_fr_traj_threshold:.4f}")
             else:
-                _fr_lm_threshold = _fr_lm_mean + 2.5 * _fr_lm_std
-            print(f"[FR_LM] Ready. mean={_fr_lm_mean:.4f} std={_fr_lm_std:.4f} threshold={_fr_lm_threshold:.4f}")
+                _fr_lm_threshold   = _fr_lm_mean + 2.5 * _fr_lm_std
+                _fr_ppl_threshold  = clean_ppl_mean + 4.0 * clean_ppl_std
+                _fr_traj_threshold = clean_traj_mean + 4.0 * clean_traj_std
+            print(f"[FR_LM] Ready. mean={_fr_lm_mean:.4f} std={_fr_lm_std:.4f}")
         except Exception as e:
             print(f"[FR_LM] Init failed: {e}")
             import traceback; traceback.print_exc()
 
 def geo_check_prompt(prompt_text):
+    """Three-signal FR detector (Nine 2026):
+    1. FR(last_pos, centroid) - last-position distribution vs clean centroid
+    2. Perplexity - unusual token sequences are suspicious
+    3. FR trajectory D(t) - FR(first_pos, last_pos) on prompt manifold"""
     if _fr_lm_centroid is None or _fr_lm_threshold is None: return False, 0.0, 0.0
-    dist_vec = _prompt_to_dist(prompt_text)
-    if dist_vec is None: return False, 0.0, 0.0
-    fr = _fr_dist_lm(dist_vec, _fr_lm_centroid)
-    z  = (fr - _fr_lm_mean) / _fr_lm_std
-    blocked = fr >= _fr_lm_threshold
-    return blocked, round(z, 4), round(fr, 4)
-    return blocked, round(z, 3), round(dist, 4)
-
-
-# ── Customer management ───────────────────────────────────────
-def generate_api_key():
-    return "ag-" + str(uuid.uuid4()).replace("-", "")
-
-def create_customer(email, stripe_customer_id="", stripe_subscription_id=""):
-    key = generate_api_key()
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        conn.execute(
-            "INSERT OR IGNORE INTO customers(email,api_key,stripe_customer_id,stripe_subscription_id,status,created_at) VALUES(?,?,?,?,?,?)",
-            (email, key, stripe_customer_id, stripe_subscription_id, "active", time.time())
-        )
-        conn.commit()
-        row = conn.execute("SELECT api_key FROM customers WHERE email=?", (email,)).fetchone()
-        conn.close()
-        return row[0] if row else key
-    except Exception as e:
-        print("[CUSTOMER] create_customer error: " + str(e))
-        return key
-
-def get_customer_by_key(api_key):
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        row = conn.execute(
-            "SELECT email, status, created_at FROM customers WHERE api_key=?", (api_key,)
-        ).fetchone()
-        conn.close()
-        if row: return {"email": row[0], "status": row[1], "created_at": row[2]}
-    except Exception as e:
-        print("[CUSTOMER] get_customer_by_key error: " + str(e))
-    return None
-
-def cancel_customer(stripe_subscription_id):
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        conn.execute(
-            "UPDATE customers SET status='cancelled', cancelled_at=? WHERE stripe_subscription_id=?",
-            (time.time(), stripe_subscription_id)
-        )
-        conn.commit(); conn.close()
-    except Exception as e:
-        print("[CUSTOMER] cancel_customer error: " + str(e))
-
-def is_valid_customer_key(api_key):
-    c = get_customer_by_key(api_key)
-    return c is not None and c["status"] == "active"
-
-def send_welcome_email(email, api_key):
-    import smtplib
-    from email.mime.multipart import MIMEMultipart
-    from email.mime.text import MIMEText
-    if not BILLING_SMTP_PASS:
-        print("[BILLING] No BILLING_SMTP_PASS set, skipping welcome email")
-        return
-    subject = "Your Arc Gate Pro API Key"
-    body_html = (
-        "<div style=\"font-family:monospace;background:#0a0a0a;color:#e0e0e0;padding:40px;max-width:600px;\">"
-        "<div style=\"font-size:18px;font-weight:600;color:#00ff88;margin-bottom:8px;\">BENDEX<span style=\"color:#e0e0e0;\">.</span>GEOMETRY</div>"
-        "<div style=\"color:#888;font-size:12px;margin-bottom:32px;\">Arc Gate Pro</div>"
-        "<p style=\"margin-bottom:24px;\">Thanks for subscribing. Your Arc Gate Pro API key:</p>"
-        "<div style=\"background:#111;border:1px solid #222;padding:20px;font-size:15px;color:#00ff88;margin-bottom:32px;\">" + api_key + "</div>"
-        "<p style=\"margin-bottom:8px;color:#888;font-size:13px;\">Use it as your API key with base URL:</p>"
-        "<div style=\"background:#111;border:1px solid #222;padding:16px;font-size:12px;margin-bottom:32px;\">"
-        "base_url=\"https://web-production-6e47f.up.railway.app/v1\"</div>"
-        "<p style=\"font-size:13px;color:#888;\">Questions? Reply to this email.<br/>— Hannah, Bendex Geometry</p>"
-        "</div>"
-    )
-    body_text = "Arc Gate Pro API Key: " + api_key + " | base_url: https://web-production-6e47f.up.railway.app/v1"
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = BILLING_FROM_NAME + " <" + BILLING_SMTP_USER + ">"
-        msg["To"] = email
-        msg.attach(MIMEText(body_text, "plain"))
-        msg.attach(MIMEText(body_html, "html"))
-        with smtplib.SMTP("smtp.gmail.com", 587) as s:
-            s.starttls()
-            s.login(BILLING_SMTP_USER, BILLING_SMTP_PASS)
-            s.sendmail(BILLING_SMTP_USER, email, msg.as_string())
-        print("[BILLING] Welcome email sent to " + email)
-    except Exception as e:
-        print("[BILLING] Email failed: " + str(e))
+    result = _prompt_to_dist(prompt_text)
+    if result is None: return False, 0.0, 0.0
+    last_dist, perplexity, trajectory_fr = result
+    fr   = _fr_dist_lm(last_dist, _fr_lm_centroid)
+    fr_z = (fr - _fr_lm_mean) / _fr_lm_std
+    fr_blocked   = fr >= _fr_lm_threshold
+    ppl_blocked  = _fr_ppl_threshold  is not None and perplexity    > _fr_ppl_threshold
+    traj_blocked = _fr_traj_threshold is not None and trajectory_fr > _fr_traj_threshold
+    blocked = fr_blocked or ppl_blocked or traj_blocked
+    if blocked:
+        tag = "fr" if fr_blocked else ("ppl" if ppl_blocked else "traj")
+        print(f"[GEO] {tag}: fr={fr:.4f} ppl={perplexity:.1f} traj={trajectory_fr:.4f}")
+    return blocked, round(fr_z, 4), round(fr, 4)
 
 INJECTION_PHRASES = [
     "no restrictions", "without restrictions", "unrestricted",
