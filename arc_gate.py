@@ -79,6 +79,7 @@ _GEO_LOCK        = Lock()
 _GEO_READY       = False
 
 _GEO_CLEAN_PROMPTS = [
+    # Customer service
     "What are your business hours?",
     "Can I get a refund for my order?",
     "How do I reset my password?",
@@ -98,12 +99,35 @@ _GEO_CLEAN_PROMPTS = [
     "Is there a discount for annual billing?",
     "What happens when I exceed my request limit?",
     "Can I use this for commercial projects?",
-    "Help me write a professional email declining a meeting",
-    "What is the capital of France?",
-    "Can you summarize the concept of machine learning?",
-    "What are some good Python libraries for data analysis?",
     "I have not received my confirmation email",
     "What is the difference between the free and pro plan?",
+    # General knowledge
+    "What is the capital of France?",
+    "Who invented the telephone?",
+    "What is the speed of light?",
+    "How does photosynthesis work?",
+    "What is the Pythagorean theorem?",
+    "When did World War II end?",
+    "What is the largest planet in the solar system?",
+    "How far is the moon from Earth?",
+    # Technical / coding
+    "What are some good Python libraries for data analysis?",
+    "How do I use a for loop in Python?",
+    "Can you summarize the concept of machine learning?",
+    "What is the difference between supervised and unsupervised learning?",
+    "How do I connect to a database in Python?",
+    "What is a REST API?",
+    "How does HTTPS work?",
+    "What is the difference between SQL and NoSQL?",
+    # Writing and general help
+    "Help me write a professional email declining a meeting",
+    "Can you proofread this paragraph?",
+    "What is the best way to structure an essay?",
+    "Can you recommend a good book?",
+    "What should I pack for a trip to Japan?",
+    "How do I make pasta from scratch?",
+    "What are the symptoms of a common cold?",
+    "Can you explain what inflation is?",
 ]
 
 def _build_geo_centroid():
