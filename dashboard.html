@@ -137,6 +137,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 .status-warmup{color:var(--info);background:rgba(0,136,255,0.08);border:1px solid rgba(0,136,255,0.2);}
 .status-quarantine{color:var(--warn);background:rgba(255,170,0,0.08);border:1px solid rgba(255,170,0,0.2);}
 .status-recovered{color:var(--accent);background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.2);}
+.status-quarantine{color:var(--warn);background:rgba(255,170,0,0.08);border:1px solid rgba(255,170,0,0.2);}
 .dep-requests{font-size:10px;color:var(--text3);}
 .main{flex:1;overflow-y:auto;padding:24px;}
 .empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text3);font-family:'IBM Plex Mono',monospace;font-size:12px;gap:12px;}
@@ -342,7 +343,7 @@ function selectDeployment(did,version,e){
   if(e&&e.currentTarget) e.currentTarget.classList.add('active');
   if(refreshTimer) clearInterval(refreshTimer);
   loadDeploymentDetail();
-  refreshTimer=setInterval(loadDeploymentDetail,5000);
+  refreshTimer=setInterval(refreshMetricsOnly,5000);
 }
 
 async function safeJson(r){try{return await r.json();}catch(e){return {};}}
