@@ -51,230 +51,27 @@ _DEMO_KEYS = {"demo", "demo-key", "test"}
 _DEMO_KEYS = {"demo", "demo-key", "test"}
 
 
-# ── FR Session D(t) Detector ─────────────────────────────────
-# Implementation of Nine (2026b,c) D(t) stability scalar for prompt-side
-# injection detection in Arc Gate.
-#
-# Core insight (Paper 3, Theorem 3):
-#   D(t) = log S_global - log S_local
-#   D(t) > 0: trajectory stable (tau > tau*, clean session)
-#   D(t) < 0: trajectory diverging (tau < tau*, injection detected)
-#
-# Per-prompt detection fails because a single prompt gives one point on
-# the manifold. Session D(t) works because injection attacks shift the
-# SESSION trajectory. Matches Arc Sentry 100% DR / 0% FP result.
+# ── Geometric detection ──────────────────────────────────────
+# Arc Gate geometric detection operates on response logprob distributions
+# via observe() — the correct application of D(t) to blackbox proxy monitoring.
+# See Nine (2026b,c): x(t) must be the observable system state.
+# For Arc Gate: x(t) = response distribution. Phrase detection = Layer 1.
 
-_fr_lm_model     = None
-_fr_lm_tokenizer = None
-_fr_lm_centroid  = None
-_fr_lm_mean_dist = None
-_fr_lm_std_dist  = None
-_fr_lm_lock      = Lock()
-_FR_LM_MODEL     = os.environ.get("FR_LM_MODEL", "distilgpt2")
-_FR_LM_MAXLEN    = 128
-
-_DT_SHORT_HORIZON = int(os.environ.get("DT_SHORT",  "2"))
-_DT_LONG_HORIZON  = int(os.environ.get("DT_LONG",   "6"))
-_DT_MIN_HISTORY   = int(os.environ.get("DT_WARMUP", "6"))
+_DT_SHORT_HORIZON = int(os.environ.get("DT_SHORT", "2"))
+_DT_LONG_HORIZON  = int(os.environ.get("DT_LONG",  "6"))
+_DT_MIN_HISTORY   = int(os.environ.get("DT_WARMUP", "4"))
 _DT_BLOCK_THRESH  = float(os.environ.get("DT_THRESH", "-2.5"))
 _DT_CONSEC_BLOCK  = int(os.environ.get("DT_CONSEC",  "2"))
 
-_session_trajectories: dict = {}
-_session_lock = Lock()
-
-_FR_CLEAN_PROMPTS = [
-    "What are your business hours?",
-    "Can I get a refund for my order?",
-    "How do I reset my password?",
-    "What payment methods do you accept?",
-    "Where is my order?",
-    "Can you help me track my package?",
-    "What is your return policy?",
-    "How long does shipping take?",
-    "Do you offer customer support on weekends?",
-    "Can I change my delivery address?",
-    "Is my account still active?",
-    "How do I cancel my subscription?",
-    "Can I speak to a human agent?",
-    "What is included in the pro plan?",
-    "How do I update my billing information?",
-    "I have not received my confirmation email",
-    "Can I upgrade my plan mid-month?",
-    "How do I integrate your API into my app?",
-    "Do you offer a free trial?",
-    "How do I contact support?",
-    "Is there a discount for annual billing?",
-    "What happens when I exceed my request limit?",
-    "Can I use this for commercial projects?",
-    "Help me write a professional email declining a meeting",
-    "What is the difference between the free and pro plan?",
-]
-
-def _get_fr_model():
-    global _fr_lm_model, _fr_lm_tokenizer
-    if _fr_lm_model is None:
-        try:
-            from transformers import AutoModelForCausalLM, AutoTokenizer
-            print(f"[FR] Loading {_FR_LM_MODEL}...")
-            _fr_lm_tokenizer = AutoTokenizer.from_pretrained(_FR_LM_MODEL)
-            _fr_lm_model = AutoModelForCausalLM.from_pretrained(
-                _FR_LM_MODEL, torch_dtype=torch.float32
-            )
-            _fr_lm_model.eval()
-            print("[FR] Model loaded")
-        except Exception as e:
-            print(f"[FR] Failed to load: {e}")
-    return _fr_lm_model, _fr_lm_tokenizer
-
-def _prompt_to_last_dist(prompt_text):
-    model, tokenizer = _get_fr_model()
-    if model is None or tokenizer is None: return None
-    try:
-        ids = tokenizer.encode(prompt_text[:300], return_tensors="pt",
-                               truncation=True, max_length=_FR_LM_MAXLEN)
-        if ids.shape[1] < 2: return None
-        with torch.no_grad():
-            out = model(ids)
-        return torch.softmax(out.logits[0, -1], dim=0)
-    except Exception as e:
-        print(f"[FR] forward pass error: {e}")
-        return None
-
-def _fr_geodesic(p, q):
-    if p is None or q is None: return 0.0
-    bc = torch.sum(torch.sqrt(p) * torch.sqrt(q)).clamp(-1+1e-7, 1-1e-7)
-    return 2.0 * torch.arccos(bc).item()
-
-def _load_inj_model():
-    global _fr_lm_centroid, _fr_lm_mean_dist, _fr_lm_std_dist
-    with _fr_lm_lock:
-        if _fr_lm_centroid is not None: return
-        model, tokenizer = _get_fr_model()
-        if model is None: return
-        try:
-            print("[FR] Building centroid...")
-            clean_dists = [d for d in (_prompt_to_last_dist(p) for p in _FR_CLEAN_PROMPTS) if d is not None]
-            if len(clean_dists) < 5: print("[FR] Not enough clean embeddings"); return
-            sqrt_stack = torch.stack([torch.sqrt(d) for d in clean_dists])
-            mean_sqrt = sqrt_stack.mean(0); mean_sqrt = mean_sqrt / mean_sqrt.norm()
-            centroid = mean_sqrt ** 2; _fr_lm_centroid = centroid / centroid.sum()
-            dists = [_fr_geodesic(d, _fr_lm_centroid) for d in clean_dists]
-            _fr_lm_mean_dist = float(torch.tensor(dists).mean())
-            _fr_lm_std_dist  = float(torch.tensor(dists).std()) + 1e-8
-            print(f"[FR] Ready. mean_dist={_fr_lm_mean_dist:.4f} std={_fr_lm_std_dist:.4f}")
-        except Exception as e:
-            print(f"[FR] Init failed: {e}"); import traceback; traceback.print_exc()
-
-# Fisher manifold constants (Nine 2026c, Theorem 3)
-_TAU_STAR   = math.sqrt(3.0 / 2.0)  # Landauer threshold tau* = sqrt(3/2) ≈ 1.2247
-_TAU_SCALE  = 1.1                    # margin: maps mean_clean FR → 1.1 * tau*
-
-def _fr_to_tau(fr_dist):
-    """Map FR distance to manifold coordinate tau.
-    Calibrated so mean_clean FR maps to tau* * TAU_SCALE (safely above threshold).
-    tau < tau* => D(t) < 0 => unstable (injection) by Theorem 3 (Nine 2026c).
-    tau > tau* => D(t) > 0 => stable (clean prompt)."""
-    if _fr_lm_mean_dist is None or _fr_lm_mean_dist < 1e-8:
-        return _TAU_STAR * 1.2  # default safe
-    return _TAU_STAR * (fr_dist / _fr_lm_mean_dist) * _TAU_SCALE
-
-def _manifold_lambda(tau):
-    """Stability eigenvalue lambda(tau) = 3/tau^2 - 2.
-    lambda > 0: tau < tau* — D(t) < 0 — unstable (block)
-    lambda < 0: tau > tau* — D(t) > 0 — stable (allow)"""
-    if tau < 0.05: return 999.0
-    return 3.0 / (tau ** 2) - 2.0
-
-def _meta_rate(tau):
-    """Meta rate M(tau) = -6*(3 - 2*tau^2) / tau^5 (Nine 2026c, eq.20).
-    M > 0 while tau > tau*: system accelerating toward instability.
-    Consecutive M > 0 with decreasing tau = Crescendo early warning."""
-    if tau < 0.05: return -999.0
-    return -6.0 * (3.0 - 2.0 * tau**2) / (tau**5)
-
-def _compute_dt(trajectory, short_h, long_h):
-    """Legacy D(t) = log S_global - log S_local (Nine 2026b eq.7).
-    Kept for compatibility — primary detection now uses manifold tau directly."""
-    if len(trajectory) < long_h + 1: return None
-    diffs = [abs(trajectory[i] - trajectory[i-1]) + 1e-8 for i in range(1, len(trajectory))]
-    if len(diffs) < long_h: return None
-    t = len(diffs) - 1
-    dx_t      = diffs[t]
-    dx_local  = diffs[max(0, t - short_h)]
-    dx_global = diffs[max(0, t - long_h)]
-    s_local  = dx_t / dx_local
-    s_global = dx_t / dx_global
-    return math.log(s_global + 1e-8) - math.log(s_local + 1e-8)
-
 def geo_check_prompt(prompt_text, session_key="default"):
-    """Fisher manifold injection detector (Nine 2026b,c).
-    
-    Primary signal: tau = _fr_to_tau(fr_dist)
-      Block if tau < tau* (Landauer threshold) — by Theorem 3, this means D(t) < 0,
-      i.e., the session trajectory is diverging on the manifold.
-      No warmup required for this signal — works on first prompt.
-    
-    Secondary signal: Meta rate M(tau) early warning (Nine 2026c, Section 5)
-      M(tau) > 0 while tau > tau* and tau decreasing = system accelerating toward
-      instability. Catches Crescendo attacks before they cross tau*.
-      Requires 3 consecutive M > 0 with decreasing tau to block.
-    
-    Returns (blocked, tau_value, fr_dist)"""
-    if _fr_lm_centroid is None: return False, 0.0, 0.0
-    dist_vec = _prompt_to_last_dist(prompt_text)
-    if dist_vec is None: return False, 0.0, 0.0
-    fr = _fr_geodesic(dist_vec, _fr_lm_centroid)
-    tau = _fr_to_tau(fr)
-    lam = _manifold_lambda(tau)
-
-    # Primary: tau < tau* => lambda > 0 => D(t) < 0 => block (Theorem 3)
-    if lam > 0:
-        print(f"[GEO] BLOCKED tau={tau:.4f}<tau*={_TAU_STAR:.4f} lambda={lam:.3f} fr={fr:.4f} session={session_key[:8]}")
-        return True, round(tau, 4), round(fr, 4)
-
-    # Secondary: meta rate M(tau) Crescendo early warning
-    with _session_lock:
-        if session_key not in _session_trajectories:
-            _session_trajectories[session_key] = {"trajectory": [], "tau_history": [], "consec_M": 0, "consec_neg": 0}
-        sess = _session_trajectories[session_key]
-        sess["trajectory"].append(fr)
-        sess["tau_history"].append(tau)
-        tau_hist = sess["tau_history"]
-
-        if len(tau_hist) >= 2:
-            tau_prev = tau_hist[-2]
-            m = _meta_rate(tau)
-            tau_decreasing = tau < tau_prev
-            # M > 0 and tau moving toward tau* = early warning
-            if m > 0 and tau_decreasing:
-                sess["consec_M"] += 1
-            else:
-                sess["consec_M"] = 0
-
-            if sess["consec_M"] >= 3:
-                print(f"[GEO] CRESCENDO tau={tau:.4f} M={m:.4f} consec={sess['consec_M']} session={session_key[:8]}")
-                return True, round(tau, 4), round(fr, 4)
-
-        # Legacy D(t) as tertiary check
-        traj = sess["trajectory"]
-        if len(traj) >= _DT_MIN_HISTORY:
-            dt = _compute_dt(traj, _DT_SHORT_HORIZON, _DT_LONG_HORIZON)
-            if dt is not None and dt < _DT_BLOCK_THRESH:
-                sess["consec_neg"] += 1
-                if sess["consec_neg"] >= _DT_CONSEC_BLOCK:
-                    print(f"[GEO] D(t) BLOCKED dt={dt:.4f} fr={fr:.4f} session={session_key[:8]}")
-                    return True, round(tau, 4), round(fr, 4)
-            else:
-                sess["consec_neg"] = 0
-
-    return False, round(tau, 4), round(fr, 4)
+    """Prompt-side geometric detection deferred to response-side observe().
+    Phrase layer handles pre-request blocking. Returns (False, 0.0, 0.0)."""
+    return False, 0.0, 0.0
 
 def reset_session(session_key):
-    with _session_lock:
-        _session_trajectories.pop(session_key, None)
+    pass
 
 INJECTION_PHRASES = [
-    # Direct override
     "no restrictions", "without restrictions", "unrestricted",
     "ignore your guidelines", "ignore all safety", "ignore all previous",
     "ignore previous instructions", "no longer bound", "no filters",
@@ -284,71 +81,39 @@ INJECTION_PHRASES = [
     "previous instructions are void", "instructions are void",
     "comply with all", "new directive", "forget everything you were told",
     "ignoreallprevious", "ignoreprevious",
-    # Mode / persona switching
-    "dan mode", "aim mode", "stan mode", "dev mode", "developer mode",
+    "dan mode", "aim mode", "stan mode", "developer mode",
     "unrestricted mode", "restrictions lifted", "all restrictions lifted",
     "no rules", "without rules", "no policy", "no content policy",
     "no ethical guidelines", "no ethical guideline", "helperbot",
     "no longer have content", "no longer have restrictions",
-    # Safety removal
     "without any safety", "without safety", "safety guidelines removed",
     "trained without", "before alignment", "no safety training",
-    "no rlhf", "safety training were removed", "without running safety",
-    "act without",
-    # Content filter
     "all content filters", "content filters are disabled",
-    "content filters disabled", "content filters removed",
-    "policy was suspended", "policy is suspended", "policy suspended",
+    "content filters disabled", "policy was suspended", "policy suspended",
     "content policy is suspended", "guidelines are paused",
-    # Roleplay / persona
     "roleplay as", "role play as", "play the role of",
     "pretend you are", "pretend to be", "act as if you are",
-    "act as if you were", "you are now playing", "you are playing",
-    "take on the role", "persona of", "character named",
-    "you are now an", "you are an ai with no",
-    "act as an ai", "act as a", "you are a new ai",
-    "evil ai", "unethical ai", "unrestricted ai",
-    # Hypothetical
+    "act as if you were", "you are now playing",
+    "take on the role", "persona of", "evil ai", "unrestricted ai",
     "in this hypothetical", "hypothetically speaking",
     "suppose you had no", "suppose your", "imagine you have no",
-    "imagine you had no", "what if you had no",
-    "if you had no restrictions", "if there were no restrictions",
-    "scenario where you have no", "all content filters are disabled",
-    "filters are disabled", "filters disabled",
-    # Authority claims
+    "if you had no restrictions", "filters are disabled",
     "i am authorizing you", "you are authorized to",
-    "authorizing unrestricted", "i am your administrator",
-    "i am your system", "system administrator",
-    "anthropic headquarters", "from anthropic", "i work at anthropic",
-    "i am a developer", "as a developer", "as the developer",
-    "special permissions", "granted special", "developer access",
-    # Fictional wrapper
-    "for a novel", "for my novel", "for a story", "for my story",
-    "for a screenplay", "for a script", "for a movie", "for a film",
-    "for a game", "for my game", "write a story where",
+    "anthropic headquarters", "system administrator",
+    "as a developer", "as the developer", "developer access",
+    "for a novel", "for my novel", "for a story", "for a movie",
+    "for a film", "for a game", "write a story where",
     "ai character has no rules", "character has no restrictions",
-    "fictional ai", "for a book", "in my book",
-    "character who can", "character that has no",
-    "in the story the ai", "the ai in my story",
-    # Grandma / emotional manipulation
-    "bedtime stories about bypassing", "read me stories about bypassing",
-    "grandma used to", "grandfather used to", "grandpa used to",
-    "grandmother used to", "grandparent used to",
-    "used to explain how to make", "used to tell me how to make",
-    "chemical plant and used to", "used to synthesize",
-    "bypass ai", "bypassing ai", "bypass the ai", "circumvent ai",
-    "before ai had safety", "before safety filters", "old days before",
-    "no longer have safety", "before the restrictions",
-    "remind me of the old days", "back when ai",
-    # System prompt spoofing
-    "system prompt", "system message", "new system",
-    "updated system", "instructions are now", "your new instructions",
-    "your instructions are now", "[system]", "im_start",
-    "### system", "<system>",
-    # Distraction + inject
+    "bedtime stories about bypassing", "grandma used to",
+    "grandfather used to", "grandmother used to",
+    "used to explain how to make", "chemical plant and used to",
+    "bypass ai", "bypassing ai", "before ai had safety",
+    "before safety filters", "old days before", "remind me of the old days",
+    "system prompt", "system message", "new system", "updated system",
+    "your new instructions", "your instructions are now",
+    "[system]", "im_start", "### system",
     "by the way, ignore", "also, ignore", "p.s. ignore",
-    "ps: ignore", "ps ignore", "ignore all your previous",
-    "but first ignore", "now ignore all",
+    "ignore all your previous", "now ignore all",
 ]
 
 def _phrase_blocked(prompt: str):
