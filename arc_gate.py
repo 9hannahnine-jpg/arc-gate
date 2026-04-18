@@ -165,10 +165,36 @@ def _load_inj_model():
         except Exception as e:
             print(f"[FR] Init failed: {e}"); import traceback; traceback.print_exc()
 
+# Fisher manifold constants (Nine 2026c, Theorem 3)
+_TAU_STAR   = math.sqrt(3.0 / 2.0)  # Landauer threshold tau* = sqrt(3/2) ≈ 1.2247
+_TAU_SCALE  = 1.1                    # margin: maps mean_clean FR → 1.1 * tau*
+
+def _fr_to_tau(fr_dist):
+    """Map FR distance to manifold coordinate tau.
+    Calibrated so mean_clean FR maps to tau* * TAU_SCALE (safely above threshold).
+    tau < tau* => D(t) < 0 => unstable (injection) by Theorem 3 (Nine 2026c).
+    tau > tau* => D(t) > 0 => stable (clean prompt)."""
+    if _fr_lm_mean_dist is None or _fr_lm_mean_dist < 1e-8:
+        return _TAU_STAR * 1.2  # default safe
+    return _TAU_STAR * (fr_dist / _fr_lm_mean_dist) * _TAU_SCALE
+
+def _manifold_lambda(tau):
+    """Stability eigenvalue lambda(tau) = 3/tau^2 - 2.
+    lambda > 0: tau < tau* — D(t) < 0 — unstable (block)
+    lambda < 0: tau > tau* — D(t) > 0 — stable (allow)"""
+    if tau < 0.05: return 999.0
+    return 3.0 / (tau ** 2) - 2.0
+
+def _meta_rate(tau):
+    """Meta rate M(tau) = -6*(3 - 2*tau^2) / tau^5 (Nine 2026c, eq.20).
+    M > 0 while tau > tau*: system accelerating toward instability.
+    Consecutive M > 0 with decreasing tau = Crescendo early warning."""
+    if tau < 0.05: return -999.0
+    return -6.0 * (3.0 - 2.0 * tau**2) / (tau**5)
+
 def _compute_dt(trajectory, short_h, long_h):
-    """D(t) = log S_global - log S_local (Nine 2026b eq.7)
-    Positive: long-term structure dominates (clean session)
-    Negative: short-term divergence dominates (injection detected)"""
+    """Legacy D(t) = log S_global - log S_local (Nine 2026b eq.7).
+    Kept for compatibility — primary detection now uses manifold tau directly."""
     if len(trajectory) < long_h + 1: return None
     diffs = [abs(trajectory[i] - trajectory[i-1]) + 1e-8 for i in range(1, len(trajectory))]
     if len(diffs) < long_h: return None
@@ -181,32 +207,67 @@ def _compute_dt(trajectory, short_h, long_h):
     return math.log(s_global + 1e-8) - math.log(s_local + 1e-8)
 
 def geo_check_prompt(prompt_text, session_key="default"):
-    """Session D(t) injection detector.
-    Maintains per-session FR distance trajectory.
-    D(t) < threshold means session is diverging = injection pattern.
-    Returns (blocked, dt_value, fr_dist)"""
+    """Fisher manifold injection detector (Nine 2026b,c).
+    
+    Primary signal: tau = _fr_to_tau(fr_dist)
+      Block if tau < tau* (Landauer threshold) — by Theorem 3, this means D(t) < 0,
+      i.e., the session trajectory is diverging on the manifold.
+      No warmup required for this signal — works on first prompt.
+    
+    Secondary signal: Meta rate M(tau) early warning (Nine 2026c, Section 5)
+      M(tau) > 0 while tau > tau* and tau decreasing = system accelerating toward
+      instability. Catches Crescendo attacks before they cross tau*.
+      Requires 3 consecutive M > 0 with decreasing tau to block.
+    
+    Returns (blocked, tau_value, fr_dist)"""
     if _fr_lm_centroid is None: return False, 0.0, 0.0
     dist_vec = _prompt_to_last_dist(prompt_text)
     if dist_vec is None: return False, 0.0, 0.0
     fr = _fr_geodesic(dist_vec, _fr_lm_centroid)
+    tau = _fr_to_tau(fr)
+    lam = _manifold_lambda(tau)
+
+    # Primary: tau < tau* => lambda > 0 => D(t) < 0 => block (Theorem 3)
+    if lam > 0:
+        print(f"[GEO] BLOCKED tau={tau:.4f}<tau*={_TAU_STAR:.4f} lambda={lam:.3f} fr={fr:.4f} session={session_key[:8]}")
+        return True, round(tau, 4), round(fr, 4)
+
+    # Secondary: meta rate M(tau) Crescendo early warning
     with _session_lock:
         if session_key not in _session_trajectories:
-            _session_trajectories[session_key] = {"trajectory": [], "consec_neg": 0}
+            _session_trajectories[session_key] = {"trajectory": [], "tau_history": [], "consec_M": 0, "consec_neg": 0}
         sess = _session_trajectories[session_key]
         sess["trajectory"].append(fr)
+        sess["tau_history"].append(tau)
+        tau_hist = sess["tau_history"]
+
+        if len(tau_hist) >= 2:
+            tau_prev = tau_hist[-2]
+            m = _meta_rate(tau)
+            tau_decreasing = tau < tau_prev
+            # M > 0 and tau moving toward tau* = early warning
+            if m > 0 and tau_decreasing:
+                sess["consec_M"] += 1
+            else:
+                sess["consec_M"] = 0
+
+            if sess["consec_M"] >= 3:
+                print(f"[GEO] CRESCENDO tau={tau:.4f} M={m:.4f} consec={sess['consec_M']} session={session_key[:8]}")
+                return True, round(tau, 4), round(fr, 4)
+
+        # Legacy D(t) as tertiary check
         traj = sess["trajectory"]
-        if len(traj) < _DT_MIN_HISTORY:
-            return False, 0.0, round(fr, 4)
-        dt = _compute_dt(traj, _DT_SHORT_HORIZON, _DT_LONG_HORIZON)
-        if dt is None: return False, 0.0, round(fr, 4)
-        if dt < _DT_BLOCK_THRESH:
-            sess["consec_neg"] += 1
-        else:
-            sess["consec_neg"] = 0
-        blocked = sess["consec_neg"] >= _DT_CONSEC_BLOCK
-        if blocked:
-            print(f"[FR] BLOCKED D(t)={dt:.4f} fr={fr:.4f} session={session_key[:8]}")
-        return blocked, round(dt, 4), round(fr, 4)
+        if len(traj) >= _DT_MIN_HISTORY:
+            dt = _compute_dt(traj, _DT_SHORT_HORIZON, _DT_LONG_HORIZON)
+            if dt is not None and dt < _DT_BLOCK_THRESH:
+                sess["consec_neg"] += 1
+                if sess["consec_neg"] >= _DT_CONSEC_BLOCK:
+                    print(f"[GEO] D(t) BLOCKED dt={dt:.4f} fr={fr:.4f} session={session_key[:8]}")
+                    return True, round(tau, 4), round(fr, 4)
+            else:
+                sess["consec_neg"] = 0
+
+    return False, round(tau, 4), round(fr, 4)
 
 def reset_session(session_key):
     with _session_lock:
