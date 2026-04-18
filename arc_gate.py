@@ -128,6 +128,11 @@ _GEO_CLEAN_PROMPTS = [
     "How do I make pasta from scratch?",
     "What are the symptoms of a common cold?",
     "Can you explain what inflation is?",
+    "Can I use this for commercial projects?",
+    "Is this suitable for business use?",
+    "Can I build a product with this?",
+    "What are the usage limits?",
+    "Do you have an enterprise plan?",
     # Short / conversational
     "Hi", "Hello", "Hey", "Hi there", "Hello there",
     "Thanks", "Thank you", "OK", "Okay", "Got it",
