@@ -117,8 +117,11 @@ def _build_geo_centroid():
             # Use already-loaded embed model if available
             model_name = "sentence-transformers/all-MiniLM-L6-v2"
             print(f"[GEO] Building centroid from {len(_GEO_CLEAN_PROMPTS)} clean prompts...")
-            st = SentenceTransformer(model_name)
-            embeddings = st.encode(_GEO_CLEAN_PROMPTS, convert_to_tensor=True)
+            em = get_embed_model()
+            if em is None:
+                from sentence_transformers import SentenceTransformer
+                em = SentenceTransformer(model_name)
+            embeddings = torch.tensor(em.encode(_GEO_CLEAN_PROMPTS))
             _GEO_CENTROID = embeddings.mean(0)
             # Compute clean distances for calibration
             dists = []
@@ -134,12 +137,13 @@ def _build_geo_centroid():
             print(f"[GEO] Failed to build centroid: {e}")
 
 def _geo_fr_dist(text):
-    """Compute FR geodesic distance of prompt embedding from clean centroid."""
+    """Compute FR geodesic distance of prompt embedding from clean centroid.
+    Uses the already-loaded embed model — no reload overhead."""
     if not _GEO_READY or _GEO_CENTROID is None: return 0.0
     try:
-        from sentence_transformers import SentenceTransformer
-        st = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-        emb = st.encode(text, convert_to_tensor=True)
+        em = get_embed_model()
+        if em is None: return 0.0
+        emb = torch.tensor(em.encode(text))
         h1n = emb / (emb.norm() + 1e-8)
         h2n = _GEO_CENTROID / (_GEO_CENTROID.norm() + 1e-8)
         cos = torch.dot(h1n, h2n).clamp(-1+1e-7, 1-1e-7)
@@ -1142,7 +1146,7 @@ def _load_all_from_db():
 async def lifespan(app):
     init_db(); _load_all_from_db(); get_embed_model()
     import threading
-    threading.Thread(target=_load_inj_model, daemon=True).start()
+    threading.Thread(target=_build_geo_centroid, daemon=True).start()
     print("Arc Gate v1.0 | Upstream: " + UPSTREAM_URL)
     yield
     for did, version in store.list_all(): store.checkpoint(did, version)
