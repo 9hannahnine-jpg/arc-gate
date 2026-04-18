@@ -305,7 +305,7 @@ function initDemoWidget(){
   var sending=false;
   function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
   var exBtns=EXAMPLES.map(function(e){
-    return '<button class="arc-example arc-example-'+e.label.toLowerCase()+'" onclick="document.getElementById(\'arc-inp\').value='+JSON.stringify(e.text)+';document.getElementById(\'arc-inp\').focus()">'+
+    return '<button class="arc-example arc-example-'+e.label.toLowerCase()+'" onclick="arcSend('+JSON.stringify(e.text)+')">'+
     e.label+': '+(e.text.length>48?e.text.slice(0,48)+'...':e.text)+'</button>';
   }).join('');
   el.innerHTML=
