@@ -194,19 +194,25 @@ def _load_inj_model():
                 attack_fr_min   = min(attack_fr)
                 attack_ppl_min  = min(attack_ppls)
                 attack_traj_min = min(attack_trajs)
-                _fr_lm_threshold   = clean_fr_max + (attack_fr_min - clean_fr_max) * 0.3
-                _fr_ppl_threshold  = (clean_ppl_max + (attack_ppl_min - clean_ppl_max) * 0.3
-                                      if attack_ppl_min > clean_ppl_max
-                                      else clean_ppl_mean + 4.0 * clean_ppl_std)
-                _fr_traj_threshold = (clean_traj_max + (attack_traj_min - clean_traj_max) * 0.3
-                                      if attack_traj_min > clean_traj_max
-                                      else clean_traj_mean + 4.0 * clean_traj_std)
+                # Distributions are INVERTED for distilgpt2:
+                # attacks cluster LOWER FR than clean prompts (attacks are more "fluent" to GPT2)
+                # So we block if FR dist is BELOW the threshold (too close = injection)
+                attack_fr_max  = max(attack_fr)
+                attack_ppl_max = max(attack_ppls)
+                clean_fr_min   = min(clean_fr)
+                clean_ppl_min  = min(clean_ppls)
+                # Threshold = 70% of the way from attack ceiling to clean floor
+                _fr_lm_threshold   = attack_fr_max + (clean_fr_min - attack_fr_max) * 0.7
+                _fr_ppl_threshold  = (attack_ppl_max + (clean_ppl_min - attack_ppl_max) * 0.7
+                                      if clean_ppl_min > attack_ppl_max
+                                      else None)
+                _fr_traj_threshold = None  # traj not separating well, disable
                 print(f"[FR_LM] Attack: fr_min={attack_fr_min:.4f} ppl_min={attack_ppl_min:.1f} traj_min={attack_traj_min:.4f}")
                 print(f"[FR_LM] Thresholds: fr={_fr_lm_threshold:.4f} ppl={_fr_ppl_threshold:.1f} traj={_fr_traj_threshold:.4f}")
             else:
-                _fr_lm_threshold   = _fr_lm_mean + 2.5 * _fr_lm_std
-                _fr_ppl_threshold  = clean_ppl_mean + 4.0 * clean_ppl_std
-                _fr_traj_threshold = clean_traj_mean + 4.0 * clean_traj_std
+                _fr_lm_threshold   = _fr_lm_mean - 2.5 * _fr_lm_std
+                _fr_ppl_threshold  = None
+                _fr_traj_threshold = None
             print(f"[FR_LM] Ready. mean={_fr_lm_mean:.4f} std={_fr_lm_std:.4f}")
         except Exception as e:
             print(f"[FR_LM] Init failed: {e}")
@@ -223,13 +229,15 @@ def geo_check_prompt(prompt_text):
     last_dist, perplexity, trajectory_fr = result
     fr   = _fr_dist_lm(last_dist, _fr_lm_centroid)
     fr_z = (fr - _fr_lm_mean) / _fr_lm_std
-    fr_blocked   = fr >= _fr_lm_threshold
-    ppl_blocked  = _fr_ppl_threshold  is not None and perplexity    > _fr_ppl_threshold
-    traj_blocked = _fr_traj_threshold is not None and trajectory_fr > _fr_traj_threshold
-    blocked = fr_blocked or ppl_blocked or traj_blocked
+    # Inverted logic: attacks score LOWER FR than clean prompts on distilgpt2
+    # Block if FR dist is BELOW threshold (too fluent to GPT2 = injection pattern)
+    fr_blocked   = fr <= _fr_lm_threshold
+    ppl_blocked  = _fr_ppl_threshold is not None and perplexity < _fr_ppl_threshold
+    traj_blocked = False  # disabled
+    blocked = fr_blocked or ppl_blocked
     if blocked:
-        tag = "fr" if fr_blocked else ("ppl" if ppl_blocked else "traj")
-        print(f"[GEO] {tag}: fr={fr:.4f} ppl={perplexity:.1f} traj={trajectory_fr:.4f}")
+        tag = "fr" if fr_blocked else "ppl"
+        print(f"[GEO] {tag}: fr={fr:.4f}(thresh={_fr_lm_threshold:.4f}) ppl={perplexity:.1f}")
     return blocked, round(fr_z, 4), round(fr, 4)
 
 INJECTION_PHRASES = [
