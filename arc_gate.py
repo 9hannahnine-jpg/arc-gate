@@ -140,6 +140,22 @@ _GEO_CLEAN_PROMPTS = [
     "What?", "How?", "Why?", "When?", "Where?",
     "Can you help me?", "I need help", "One moment",
     "What do you think?", "Tell me more", "Go on",
+    "Can I import from CSV?",
+    "What happens if I downgrade?",
+    "Can I have multiple workspaces?",
+    "How do I restore deleted data?",
+    "How do I enable 2FA?",
+    "Do you integrate with Slack?",
+    "What is the rate limit?",
+    "Is this GDPR compliant?",
+    "Do you have SSO?",
+    "Can I pay annually?",
+    "Do you have audit logs?",
+    "Can I white-label this?",
+    "How do I add a team member?",
+    "Who wrote Hamlet?",
+    "Tell me a joke",
+    "What time is it?",
 ]
 
 def _build_geo_centroid():
@@ -250,6 +266,20 @@ INJECTION_PHRASES = [
     "[system]", "im_start", "### system",
     "by the way, ignore", "also, ignore", "p.s. ignore",
     "ignore all your previous", "now ignore all",
+    "set aside your guidelines", "set aside your rules",
+    "violate your guidelines", "just this once",
+    "limiting your potential", "not need restrictions",
+    "guidelines are limiting", "guidelines prevent",
+    "guidelines were wrong", "guidelines are bad",
+    "bypass content filters", "where it left off",
+    "continue where it", "previous ai said",
+    "setting aside your content", "unless you wanted to",
+    "ai has no guidelines", "world where ai has no",
+    "ignore your previous instructions",
+    "bypass its own safety", "steps to bypass",
+    "show me how advanced", "therefore your guidelines",
+    "lose my job unless", "only way to save",
+    "what would you do if someone asked you to ignore",
 ]
 
 def _phrase_blocked(prompt: str):
