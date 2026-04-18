@@ -75,9 +75,9 @@ _FR_LM_MAXLEN    = 128
 
 _DT_SHORT_HORIZON = int(os.environ.get("DT_SHORT",  "2"))
 _DT_LONG_HORIZON  = int(os.environ.get("DT_LONG",   "6"))
-_DT_MIN_HISTORY   = int(os.environ.get("DT_WARMUP", "4"))
-_DT_BLOCK_THRESH  = float(os.environ.get("DT_THRESH", "-0.3"))
-_DT_CONSEC_BLOCK  = int(os.environ.get("DT_CONSEC",  "1"))
+_DT_MIN_HISTORY   = int(os.environ.get("DT_WARMUP", "6"))
+_DT_BLOCK_THRESH  = float(os.environ.get("DT_THRESH", "-2.0"))
+_DT_CONSEC_BLOCK  = int(os.environ.get("DT_CONSEC",  "2"))
 
 _session_trajectories: dict = {}
 _session_lock = Lock()
@@ -1387,7 +1387,7 @@ async def proxy(request: Request, path: str,
                 "model":body_dict.get("model","unknown"),
                 "arc_sentry":{"blocked":True,"reason":f"phrase:{matched}","layer":"phrase"}
             })
-        geo_blocked, fr_z, fr_dist = geo_check_prompt(prompt_text, session_key=did)
+        geo_blocked, fr_z, fr_dist = geo_check_prompt(prompt_text, session_key=_incoming_token)
         if geo_blocked:
             return JSONResponse(status_code=200, content={
                 "id":"blocked","object":"chat.completion",
