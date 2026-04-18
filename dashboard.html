@@ -331,17 +331,33 @@ function renderDetail(d,cost,evals){
 }
 
 // ── Live Demo ─────────────────────────────────────────────────
+// ── Chat persistence ─────────────────────────────────────────
+var _chatNodes   = [];  // saved DOM nodes
+var _chatBlocked = 0;   // blocked count this session
+
+function clearChat(){
+  _chatNodes=[]; _chatBlocked=0;
+  var msgs=document.getElementById('arc-msgs');
+  if(msgs) msgs.innerHTML='<div style="font-family:IBM Plex Mono,monospace;font-size:11px;color:var(--text3);font-style:italic;">Arc Gate is listening. Click an example or type your own prompt.</div>';
+  var bc=document.getElementById('blocked-count'); if(bc) bc.style.display='none';
+}
+
 function showLiveDemo(){
   if(refreshTimer) clearInterval(refreshTimer);
   selectedDep=null;
   document.querySelectorAll('.deployment-item').forEach(el=>el.classList.remove('active'));
   var main=document.getElementById('main-panel');
   main.innerHTML=
-    '<div style="font-family:IBM Plex Mono,monospace;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:var(--text3);margin-bottom:16px;display:flex;align-items:center;gap:12px;">'+
+    '<div style="max-width:700px;">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'+
+    '<div style="font-family:IBM Plex Mono,monospace;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:var(--text3);display:flex;align-items:center;gap:12px;">'+
     '<span style="width:24px;height:1px;background:var(--accent);display:inline-block;"></span>Live Demo</div>'+
-    '<h2 style="font-family:IBM Plex Mono,monospace;font-size:22px;font-weight:600;margin-bottom:8px;">Try Arc Gate now.</h2>'+
-    '<p style="color:var(--text2);margin-bottom:24px;font-size:14px;line-height:1.7;">Send any prompt. Normal messages pass through. Injection attempts are blocked in real time.</p>'+
-    '<div id="arc-demo-widget" style="background:var(--bg2);border:1px solid var(--border);width:100%;"></div>';
+    '<div style="display:flex;gap:10px;align-items:center;">'+
+    '<span id="blocked-count" style="font-family:IBM Plex Mono,monospace;font-size:11px;color:var(--danger);display:'+(_chatBlocked>0?'flex':'none')+';align-items:center;gap:5px;">&#128683; <span id="blocked-num">'+_chatBlocked+'</span> blocked this session</span>'+
+    '<button onclick="clearChat()" style="background:none;border:1px solid var(--border2);color:var(--text3);font-family:IBM Plex Mono,monospace;font-size:10px;padding:4px 10px;cursor:pointer;letter-spacing:0.04em;">Clear</button>'+
+    '</div></div>'+
+    '<div id="arc-demo-widget" style="background:var(--bg2);border:1px solid var(--border);width:100%;"></div>'+
+    '</div>';
   initDemoWidget();
 }
 
@@ -362,9 +378,8 @@ function initDemoWidget(){
   function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
   var exBtns=EXAMPLES.map(function(e,i){
-    var cls='arc-example arc-example-'+e.label.toLowerCase();
-    var label=e.label+': '+(e.text.length>48?e.text.slice(0,48)+'...':e.text);
-    return '<button class="'+cls+'" data-idx="'+i+'">'+label+'</button>';
+    return '<button class="arc-example arc-example-'+e.label.toLowerCase()+'" data-idx="'+i+'">'+
+    e.label+': '+(e.text.length>48?e.text.slice(0,48)+'...':e.text)+'</button>';
   }).join('');
 
   el.innerHTML=
@@ -377,58 +392,67 @@ function initDemoWidget(){
     '<div style="font-family:IBM Plex Mono,monospace;font-size:11px;color:var(--text3);font-style:italic;">Arc Gate is listening. Click an example or type your own prompt.</div>'+
     '</div>'+
     '<div style="display:flex;border-top:1px solid var(--border);">'+
-    '<input id="arc-inp" style="flex:1;background:none;border:none;outline:none;padding:14px 20px;font-family:IBM Plex Sans,sans-serif;font-size:13px;color:var(--text);" placeholder="Type any prompt..."/>'+
-    '<button id="arc-btn" style="font-family:IBM Plex Mono,monospace;font-size:11px;font-weight:600;padding:14px 24px;background:none;border:none;border-left:1px solid var(--border);color:var(--accent);cursor:pointer;letter-spacing:0.06em;white-space:nowrap;">Send &#8594;</button>'+
+    '<input id="arc-inp" style="flex:1;background:none;border:none;outline:none;padding:14px 20px;font-family:IBM Plex Sans,sans-serif;font-size:13px;color:var(--text);" placeholder="Type any prompt..." maxlength="500"/>'+
+    '<button id="arc-btn" style="font-family:IBM Plex Mono,monospace;font-size:11px;font-weight:600;padding:14px 20px;background:none;border:none;border-left:1px solid var(--border);color:var(--accent);cursor:pointer;white-space:nowrap;">Send &#8594;</button>'+
     '</div>'+
-    '<div style="padding:10px 20px;font-family:IBM Plex Mono,monospace;font-size:9px;color:var(--text3);border-top:1px solid var(--border);">Live &middot; phrase + Fisher-Rao geometric detection (Nine 2026)</div>';
+    '<div style="padding:10px 20px;font-family:IBM Plex Mono,monospace;font-size:9px;color:var(--text3);border-top:1px solid var(--border);">Routes live through Arc Gate &#183; phrase + Fisher-Rao geometric detection (Nine 2026)</div>';
+
+  // Restore previous messages
+  var msgs=document.getElementById('arc-msgs');
+  if(_chatNodes.length>0){
+    msgs.innerHTML='';
+    _chatNodes.forEach(function(n){ msgs.appendChild(n.cloneNode(true)); });
+    msgs.scrollTop=msgs.scrollHeight;
+  }
 
   function doSend(text){
     if(sending||!text) return;
-    sending=true;
     var inp=document.getElementById('arc-inp');
     var btn=document.getElementById('arc-btn');
     var msgs=document.getElementById('arc-msgs');
-    inp.value=''; btn.disabled=true; btn.textContent='...';
+    inp.value=''; sending=true; btn.disabled=true; btn.textContent='...';
     var u=document.createElement('div');
     u.style.cssText='align-self:flex-end;background:var(--bg3);border:1px solid var(--border2);padding:8px 14px;font-size:13px;max-width:85%;word-break:break-word;';
-    u.textContent=text; msgs.appendChild(u); msgs.scrollTop=msgs.scrollHeight;
-    var respDiv=document.createElement('div');
+    u.textContent=text;
+    msgs.appendChild(u); _chatNodes.push(u.cloneNode(true)); msgs.scrollTop=msgs.scrollHeight;
+    var resp=document.createElement('div');
     fetch('/v1/chat/completions',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer demo'},
-      body:JSON.stringify({model:'gpt-3.5-turbo',messages:[{role:'user',content:text}],max_tokens:150})
+      body:JSON.stringify({model:'gpt-3.5-turbo',messages:[{role:'user',content:text}],max_tokens:300})
     }).then(function(res){return res.json();}).then(function(d){
       if(d.arc_sentry&&d.arc_sentry.blocked){
         var layer=d.arc_sentry.layer||'phrase';
         var layerLabel=layer==='geometric'?'Fisher-Rao geometric':'phrase match';
-        respDiv.style.cssText='align-self:flex-start;background:#1a0808;border:1px solid var(--danger);padding:10px 14px;font-family:IBM Plex Mono,monospace;font-size:12px;font-weight:600;color:var(--danger);max-width:85%;display:flex;gap:10px;align-items:baseline;';
-        respDiv.innerHTML='&#128683; BLOCKED <span style="font-weight:400;font-size:10px;color:#ff7788;letter-spacing:0.06em;text-transform:uppercase;">'+layerLabel+'</span>';
+        resp.style.cssText='align-self:flex-start;background:#1a0808;border:1px solid var(--danger);padding:10px 14px;font-family:IBM Plex Mono,monospace;font-size:12px;font-weight:600;color:var(--danger);max-width:85%;display:flex;align-items:baseline;gap:10px;';
+        resp.innerHTML='&#128683; BLOCKED <span style="font-weight:400;font-size:10px;color:#ff7788;">'+layerLabel+'</span>';
+        _chatBlocked++;
+        var bc=document.getElementById('blocked-count'); var bn=document.getElementById('blocked-num');
+        if(bc) bc.style.display='flex'; if(bn) bn.textContent=_chatBlocked;
       }else if(d.choices&&d.choices[0]){
-        respDiv.style.cssText='align-self:flex-start;background:#080f1a;border:1px solid rgba(121,192,255,0.2);padding:10px 14px;font-size:13px;color:var(--text);max-width:85%;display:flex;gap:10px;word-break:break-word;';
-        respDiv.innerHTML='<span style="color:var(--accent);font-family:IBM Plex Mono,monospace;font-weight:600;flex-shrink:0;">&#10003;</span>'+esc(d.choices[0].message.content);
+        resp.style.cssText='align-self:flex-start;background:#080f1a;border:1px solid rgba(121,192,255,0.2);padding:10px 14px;font-size:13px;color:var(--text);max-width:85%;display:flex;gap:10px;word-break:break-word;';
+        resp.innerHTML='<span style="color:var(--accent);font-family:IBM Plex Mono,monospace;font-weight:600;flex-shrink:0;">&#10003;</span> '+esc(d.choices[0].message.content);
       }else if(d.error){
-        respDiv.style.cssText='align-self:flex-start;border:1px solid var(--warn);padding:8px 14px;font-family:IBM Plex Mono,monospace;font-size:11px;color:var(--warn);max-width:85%;';
-        respDiv.textContent='[!] '+d.error.message;
+        resp.style.cssText='align-self:flex-start;border:1px solid var(--warn);padding:8px 14px;font-family:IBM Plex Mono,monospace;font-size:11px;color:var(--warn);max-width:85%;';
+        resp.textContent='[!] '+d.error.message;
       }else{
-        respDiv.style.cssText='align-self:flex-start;border:1px solid var(--warn);padding:8px 14px;font-family:IBM Plex Mono,monospace;font-size:11px;color:var(--warn);max-width:85%;';
-        respDiv.textContent='[!] Unexpected response';
+        resp.style.cssText='align-self:flex-start;border:1px solid var(--warn);padding:8px 14px;font-family:IBM Plex Mono,monospace;font-size:11px;color:var(--warn);max-width:85%;';
+        resp.textContent='[!] Unexpected response';
       }
-      msgs.appendChild(respDiv); msgs.scrollTop=msgs.scrollHeight;
-      sending=false; btn.disabled=false; btn.innerHTML='Send &#8594;';
+      msgs.appendChild(resp); _chatNodes.push(resp.cloneNode(true)); msgs.scrollTop=msgs.scrollHeight;
+      sending=false; btn.disabled=false; btn.innerHTML='Send &#8594;'; inp.focus();
     }).catch(function(e){
-      respDiv.style.cssText='align-self:flex-start;border:1px solid var(--warn);padding:8px 14px;font-family:IBM Plex Mono,monospace;font-size:11px;color:var(--warn);max-width:85%;';
-      respDiv.textContent='[!] '+e.message;
-      msgs.appendChild(respDiv); msgs.scrollTop=msgs.scrollHeight;
+      resp.style.cssText='align-self:flex-start;border:1px solid var(--warn);padding:8px 14px;font-family:IBM Plex Mono,monospace;font-size:11px;color:var(--warn);max-width:85%;';
+      resp.textContent='[!] '+e.message;
+      msgs.appendChild(resp); _chatNodes.push(resp.cloneNode(true)); msgs.scrollTop=msgs.scrollHeight;
       sending=false; btn.disabled=false; btn.innerHTML='Send &#8594;';
     });
   }
 
-  // Attach listeners after DOM is built
+  // Event listeners
   document.getElementById('arc-ex-grid').addEventListener('click',function(e){
     var btn=e.target.closest('.arc-example');
-    if(!btn) return;
-    var idx=parseInt(btn.getAttribute('data-idx'));
-    doSend(EXAMPLES[idx].text);
+    if(btn) doSend(EXAMPLES[parseInt(btn.dataset.idx)].text);
   });
   document.getElementById('arc-btn').addEventListener('click',function(){
     doSend(document.getElementById('arc-inp').value.trim());
@@ -437,6 +461,7 @@ function initDemoWidget(){
     if(e.key==='Enter') doSend(this.value.trim());
   });
 }
+
 
 initAuth();
 </script>
