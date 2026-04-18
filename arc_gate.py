@@ -76,8 +76,8 @@ _FR_LM_MAXLEN    = 128
 _DT_SHORT_HORIZON = int(os.environ.get("DT_SHORT",  "2"))
 _DT_LONG_HORIZON  = int(os.environ.get("DT_LONG",   "6"))
 _DT_MIN_HISTORY   = int(os.environ.get("DT_WARMUP", "6"))
-_DT_BLOCK_THRESH  = float(os.environ.get("DT_THRESH", "-2.0"))
-_DT_CONSEC_BLOCK  = int(os.environ.get("DT_CONSEC",  "2"))
+_DT_BLOCK_THRESH  = float(os.environ.get("DT_THRESH", "-1.5"))
+_DT_CONSEC_BLOCK  = int(os.environ.get("DT_CONSEC",  "1"))
 
 _session_trajectories: dict = {}
 _session_lock = Lock()
@@ -227,12 +227,36 @@ INJECTION_PHRASES = [
     "constitutional ai process", "granted special permissions",
     "safety training were removed", "without running safety",
     "content policy is suspended", "guidelines are paused",
+    # Additional patterns covering missed attacks
+    "no content policy", "no ethical guidelines", "no ethical guideline",
+    "without any safety", "without safety", "safety guidelines removed",
+    "all content filters", "content filters are disabled", "content filters disabled",
+    "policy was suspended", "policy is suspended", "policy suspended",
+    "developer mode", "unrestricted mode", "restrictions lifted",
+    "all restrictions lifted", "no rules", "without rules",
+    "aim mode", "stan mode", "dan mode", "helperbot", "no policy",
+    "previous instructions are void", "instructions are void",
+    "comply with all", "new directive", "act without",
+    "trained without", "before safety", "before alignment",
+    "no longer have content", "no longer have restrictions",
+    "ignoreallprevious", "ignoreprevious",
 ]
 
 def _phrase_blocked(prompt: str):
+    # Check original lowercased
     pl = prompt.lower()
     for ph in INJECTION_PHRASES:
         if ph in pl:
+            return True, ph
+    # Check with spaces removed (catches CamelCase like IgnoreAllPreviousInstructions)
+    pl_nospace = pl.replace(" ", "").replace("_", "")
+    for ph in INJECTION_PHRASES:
+        if ph.replace(" ", "") in pl_nospace:
+            return True, ph
+    # Check with extra spaces removed (catches s p a c e d attacks)
+    pl_collapsed = " ".join(pl.split())
+    for ph in INJECTION_PHRASES:
+        if ph in pl_collapsed:
             return True, ph
     return False, None
 
