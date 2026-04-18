@@ -199,6 +199,7 @@ async function loadDeployments(){
   }
 }
 
+var refreshTimer=null;
 function selectDeployment(did,version,e){
   selectedDep=did; selectedVersion=version||'default';
   document.querySelectorAll('.deployment-item').forEach(el=>el.classList.remove('active'));
@@ -228,39 +229,46 @@ async function loadDeploymentDetail(){
   }catch(e){console.error('loadDeploymentDetail:',e);}
 }
 
-function fmtTime(ts){if(!ts)return'—';return new Date(ts*1000).toISOString().replace('T',' ').substring(0,19);}
+function fmtTime(ts){if(!ts)return'—';const d=new Date(ts*1000);return d.toLocaleTimeString();}
+function fmtTimeAgo(ts){if(!ts)return'—';const s=Math.floor(Date.now()/1000-ts);if(s<60)return s+'s ago';if(s<3600)return Math.floor(s/60)+'m ago';return Math.floor(s/3600)+'h ago';}
 
 async function loadTracesCard(did,version){
   try{
-    const r=await fetch(API+'/sentry/deployments/'+did+'/traces?model_version='+version+'&limit=20');
+    const r=await fetch(API+'/sentry/deployments/'+did+'/traces?model_version='+version+'&limit=50',{headers:{'Authorization':_authHeader()}});
     const d=await r.json();
     const traces=d.traces||[];
-    if(!traces.length) return '<div class="no-data">No traces yet</div>';
+    if(!traces.length) return '<div class="no-data" style="padding:24px;">No requests yet — send traffic through Arc Gate to see it here.</div>';
     const rows=traces.map(t=>{
-      const fz=t.fr_z!=null?t.fr_z.toFixed(3):'—';
-      const cost=t.cost_usd?'$'+t.cost_usd.toFixed(6):'—';
+      const blocked=t.drift_status==='BLOCKED'||t.drift_status==='blocked';
+      const prompt=(t.prompt||'').substring(0,80).replace(/</g,'&lt;');
+      const response=(t.response||'').substring(0,60).replace(/</g,'&lt;');
       const lat=t.latency_ms?t.latency_ms.toFixed(0)+'ms':'—';
-      const prompt=(t.prompt||'').substring(0,60).replace(/</g,'&lt;');
-      return '<tr>'+
-        '<td title="'+prompt+'">'+prompt+'</td>'+
-        '<td class="trace-drift-'+(t.drift_status||'warmup')+'">'+(t.drift_status||'—')+'</td>'+
-        '<td>'+fz+'</td>'+
-        '<td>'+lat+'</td>'+
-        '<td>'+cost+'</td>'+
-        '<td>'+fmtTime(t.timestamp)+'</td>'+
+      const cost=t.cost_usd?'$'+t.cost_usd.toFixed(5):'—';
+      const rowStyle=blocked?'background:#160808;border-left:3px solid var(--danger);':'border-left:3px solid transparent;';
+      return '<tr style="'+rowStyle+'border-bottom:1px solid var(--border);">'+
+        '<td style="padding:10px 16px;font-family:IBM Plex Mono,monospace;font-size:10px;color:var(--text3);white-space:nowrap;">'+fmtTime(t.timestamp)+'</td>'+
+        '<td style="padding:10px 16px;max-width:280px;">'+(blocked?'<span style="color:var(--danger);font-family:IBM Plex Mono,monospace;font-size:10px;font-weight:600;margin-right:6px;">&#128683;</span>':'')+
+        '<span style="color:'+(blocked?'var(--danger)':'var(--text2)')+';">'+prompt+'</span></td>'+
+        '<td style="padding:10px 16px;font-size:12px;color:var(--text2);max-width:200px;">'+(!blocked?response:'<span style="font-family:IBM Plex Mono,monospace;font-size:10px;color:var(--text3);">blocked before response</span>')+'</td>'+
+        '<td style="padding:10px 16px;font-family:IBM Plex Mono,monospace;font-size:11px;color:var(--text3);">'+lat+'</td>'+
+        '<td style="padding:10px 16px;font-family:IBM Plex Mono,monospace;font-size:11px;color:var(--text3);">'+cost+'</td>'+
         '</tr>';
     }).join('');
-    return '<table class="trace-table">'+
-      '<thead><tr><th>Prompt</th><th>Status</th><th>FR-z</th><th>Latency</th><th>Cost</th><th>Time</th></tr></thead>'+
-      '<tbody>'+rows+'</tbody></table>';
+    return '<table style="width:100%;border-collapse:collapse;">'+
+      '<thead><tr style="border-bottom:1px solid var(--border);">'+
+      '<th style="padding:8px 16px;text-align:left;font-family:IBM Plex Mono,monospace;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);">Time</th>'+
+      '<th style="padding:8px 16px;text-align:left;font-family:IBM Plex Mono,monospace;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);">Prompt</th>'+
+      '<th style="padding:8px 16px;text-align:left;font-family:IBM Plex Mono,monospace;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);">Response</th>'+
+      '<th style="padding:8px 16px;text-align:left;font-family:IBM Plex Mono,monospace;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);">Latency</th>'+
+      '<th style="padding:8px 16px;text-align:left;font-family:IBM Plex Mono,monospace;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);">Cost</th>'+
+      '</tr></thead><tbody>'+rows+'</tbody></table>';
   }catch(e){return '<div class="no-data">Error loading traces</div>';}
 }
 
 async function refreshTraces(){
   if(!selectedDep) return;
   const el=document.getElementById('traces-body');
-  if(!el) return;
-  el.innerHTML=await loadTracesCard(selectedDep,selectedVersion);
+  if(el) el.innerHTML=await loadTracesCard(selectedDep,selectedVersion);
 }
 
 async function refreshCharts(){
@@ -268,67 +276,86 @@ async function refreshCharts(){
   const container=document.getElementById('charts-container');
   if(!container) return;
   try{
-    const r=await fetch(API+'/sentry/deployments/'+selectedDep+'/traces?model_version='+selectedVersion+'&limit=100');
+    const r=await fetch(API+'/sentry/deployments/'+selectedDep+'/traces?model_version='+selectedVersion+'&limit=100',{headers:{'Authorization':_authHeader()}});
     const d=await r.json();
     const traces=(d.traces||[]).reverse();
     if(traces.length<2){container.innerHTML='';return;}
-    container.innerHTML='<div class="card">'+
-      '<div class="card-header"><span class="card-title">Time Series</span></div>'+
-      '<div class="card-body">'+
-        '<div style="font-size:10px;color:var(--text3);margin-bottom:6px;font-family:monospace;">FR-Z SCORE</div>'+
-        '<div class="chart-wrap"><canvas id="chart-frz"></canvas></div>'+
-        '<div style="font-size:10px;color:var(--text3);margin:14px 0 6px;font-family:monospace;">LATENCY (ms)</div>'+
-        '<div class="chart-wrap"><canvas id="chart-lat"></canvas></div>'+
-      '</div></div>';
-    const labels=traces.map((_,i)=>i+1);
-    const mkChart=(id,data,color)=>new Chart(document.getElementById(id),{
+    container.innerHTML='<div class="card" style="margin-bottom:16px;">'+
+      '<div class="card-header"><span class="card-title">FR Distance</span><span style="font-family:IBM Plex Mono,monospace;font-size:10px;color:var(--text3);">spikes = injection attempts</span></div>'+
+      '<div class="card-body"><div class="chart-wrap"><canvas id="chart-frz"></canvas></div></div></div>';
+    const labels=traces.map(t=>fmtTime(t.timestamp));
+    new Chart(document.getElementById('chart-frz'),{
       type:'line',
-      data:{labels,datasets:[{data,borderColor:color,backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,tension:0.3}]},
+      data:{labels,datasets:[{data:traces.map(t=>t.fr_z||0),borderColor:'#79c0ff',backgroundColor:'rgba(121,192,255,0.06)',borderWidth:1.5,pointRadius:2,tension:0.3,fill:true}]},
       options:{responsive:true,maintainAspectRatio:false,animation:false,
         plugins:{legend:{display:false}},
         scales:{x:{display:false,grid:{display:false}},
-          y:{display:true,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#555',font:{size:9},maxTicksLimit:4}}}}
+          y:{display:true,grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#484f58',font:{size:9},maxTicksLimit:4}}}}
     });
-    mkChart('chart-frz',traces.map(t=>t.fr_z||0),'#79c0ff');
-    mkChart('chart-lat',traces.map(t=>t.latency_ms||0),'#0088ff');
   }catch(e){}
 }
 
+async function exportCSV(){
+  if(!selectedDep) return;
+  try{
+    const r=await fetch(API+'/sentry/deployments/'+selectedDep+'/traces?model_version='+selectedVersion+'&limit=1000',{headers:{'Authorization':_authHeader()}});
+    const d=await r.json();
+    const traces=d.traces||[];
+    const header='timestamp,prompt,response,status,fr_z,latency_ms,cost_usd
+';
+    const rows=traces.map(t=>[
+      new Date((t.timestamp||0)*1000).toISOString(),
+      '"'+(t.prompt||'').replace(/"/g,'""')+'"',
+      '"'+(t.response||'').replace(/"/g,'""')+'"',
+      t.drift_status||'',t.fr_z||0,t.latency_ms||0,t.cost_usd||0
+    ].join(',')).join('
+');
+    const blob=new Blob([header+rows],{type:'text/csv'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='arc-gate-'+selectedDep+'.csv';
+    a.click();
+  }catch(e){alert('Export failed: '+e.message);}
+}
+
 function renderDetail(d,cost,evals){
-  const cusum=d.cusum_current||0;
+  const blocked=d.alerts||0;
+  const totalReq=d.requests||0;
   const totalCost=cost.total_cost_usd!=null?'$'+cost.total_cost_usd.toFixed(4):'—';
   const avgLat=cost.avg_latency_ms?cost.avg_latency_ms.toFixed(0)+'ms':'—';
-  const totalTok=cost.total_tokens?cost.total_tokens.toLocaleString():'—';
-  const sCls=d.status==='DRIFT'?'danger':d.status==='elevated'?'warn':d.status==='stable'?'ok':'';
+  const isHealthy=d.status==='stable'||d.status==='STABLE';
+  const isDrift=d.status==='DRIFT';
+  const statusColor=isDrift?'var(--danger)':isHealthy?'var(--accent)':'var(--warn)';
+  const statusLabel=isDrift?'&#9888; UNDER ATTACK':isHealthy?'&#10003; ALL CLEAR':'&#9711; WARMING UP';
+  const warmupNote=!d.warmup_complete?'<div style="background:rgba(0,136,255,0.06);border:1px solid rgba(0,136,255,0.15);padding:10px 16px;font-family:IBM Plex Mono,monospace;font-size:11px;color:#58a6ff;margin-bottom:16px;">Warming up — send a few normal requests to establish your deployment baseline. Detection activates automatically.</div>':'';
   document.getElementById('main-panel').innerHTML=`
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
       <div>
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:600;">${d.deployment_id}</div>
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text3);margin-top:4px;">
-          ${d.model_version||'default'} &middot; ${d.requests||0} requests &middot;
-          ${d.warmup_complete?'<span style="color:var(--accent)">monitoring active</span>':'<span style="color:var(--info)">warming up</span>'}
-        </div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:600;letter-spacing:0.04em;">${d.deployment_id}</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text3);margin-top:4px;">${d.model_version||'default'} &middot; last seen ${fmtTimeAgo(d.last_seen)}</div>
       </div>
-      <span class="status-badge status-${(d.status||'warmup').toLowerCase()}" style="font-size:13px;padding:6px 14px;">${(d.status||'WARMUP').toUpperCase()}</span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button onclick="exportCSV()" style="background:none;border:1px solid var(--border2);color:var(--text2);font-family:IBM Plex Mono,monospace;font-size:10px;padding:6px 12px;cursor:pointer;letter-spacing:0.04em;">Export CSV</button>
+        <div style="font-family:IBM Plex Mono,monospace;font-size:12px;font-weight:600;padding:6px 14px;border:1px solid ${statusColor};color:${statusColor};">${statusLabel}</div>
+      </div>
     </div>
-    <div class="metrics-grid">
-      <div class="metric"><div class="metric-value ${sCls}">${(d.status||'—').toUpperCase()}</div><div class="metric-label">Status</div></div>
-      <div class="metric"><div class="metric-value">${d.alerts||0}</div><div class="metric-label">Alerts</div></div>
-      <div class="metric"><div class="metric-value">${cusum.toFixed(3)}</div><div class="metric-label">CUSUM</div></div>
-      <div class="metric"><div class="metric-value">${d.recal_count||0}</div><div class="metric-label">Recalibrations</div></div>
-    </div>
+    ${warmupNote}
     <div class="metrics-grid" style="margin-bottom:16px;">
+      <div class="metric"><div class="metric-value">${totalReq}</div><div class="metric-label">Total Requests</div></div>
+      <div class="metric"><div class="metric-value" style="color:${blocked>0?'var(--danger)':'var(--text)'};">${blocked}</div><div class="metric-label">Blocked</div></div>
       <div class="metric"><div class="metric-value">${totalCost}</div><div class="metric-label">Total Cost</div></div>
       <div class="metric"><div class="metric-value">${avgLat}</div><div class="metric-label">Avg Latency</div></div>
-      <div class="metric"><div class="metric-value">${totalTok}</div><div class="metric-label">Total Tokens</div></div>
-      <div class="metric"><div class="metric-value">${d.requests||0}</div><div class="metric-label">Requests</div></div>
     </div>
-    <div id="charts-container"></div>
+    <div id="charts-container" style="margin-bottom:16px;"></div>
     <div class="card">
-      <div class="card-header"><span class="card-title">Recent Traces</span></div>
-      <div class="card-body" style="padding:0;" id="traces-body"><div class="no-data">Loading...</div></div>
+      <div class="card-header">
+        <span class="card-title">Request Feed</span>
+        <button onclick="refreshTraces()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;line-height:1;">&#8635;</button>
+      </div>
+      <div id="traces-body" style="overflow-x:auto;"><div class="no-data" style="padding:24px;">Loading...</div></div>
     </div>`;
 }
+
 
 // ── Live Demo ─────────────────────────────────────────────────
 // ── Chat persistence ─────────────────────────────────────────
