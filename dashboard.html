@@ -324,17 +324,17 @@ function initDemoWidget(){
     '</div>'+
     '<div style="padding:10px 20px;font-family:IBM Plex Mono,monospace;font-size:9px;color:var(--text3);border-top:1px solid var(--border);">Live &middot; phrase + Fisher-Rao geometric detection (Nine 2026)</div>';
 
-  // Attach click handlers after innerHTML is set
-  el.querySelectorAll('.arc-example').forEach(function(btn){
-    btn.addEventListener('click', function(){
-      var idx=parseInt(this.getAttribute('data-idx'));
-      demoSend(EXAMPLES[idx].text);
+  // Attach click handlers — use setTimeout to ensure DOM is fully settled
+  setTimeout(function(){
+    document.querySelectorAll('.arc-example').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var i=parseInt(this.getAttribute('data-idx'));
+        window.demoSend(EXAMPLES[i].text);
+      });
     });
-  });
-
-  document.getElementById('arc-inp').addEventListener('keydown',function(e){
-    if(e.key==='Enter') demoSend();
-  });
+    var inp=document.getElementById('arc-inp');
+    if(inp) inp.addEventListener('keydown',function(e){if(e.key==='Enter')window.demoSend();});
+  }, 0);
 
   window.demoSend=function(prefill){
     if(sending) return;
