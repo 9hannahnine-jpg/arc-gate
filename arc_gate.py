@@ -1285,6 +1285,22 @@ async def remove_assertion(deployment_id: str, name: str, auth=Depends(auth)):
     return {"status": "ok", "name": name}
 
 
+@app.get("/arc/whoami")
+async def whoami(request: Request):
+    """Validate an ag- API key and return customer info for dashboard login."""
+    auth_h = request.headers.get("authorization", "")
+    key = auth_h.replace("Bearer ", "").replace("bearer ", "").strip()
+    if not key.startswith("ag-"):
+        return JSONResponse(status_code=401, content={"error": "Not a customer key"})
+    customer = get_customer_by_key(key)
+    if not customer:
+        return JSONResponse(status_code=401, content={"error": "Invalid or expired key"})
+    email, status, created_at = customer
+    if status != "active":
+        return JSONResponse(status_code=403, content={"error": "Subscription cancelled"})
+    did = key[-8:]
+    return {"email": email, "status": status, "deployment_id": did, "created_at": created_at}
+
 @app.post("/stripe/webhook")
 async def stripe_webhook(request: Request):
     import hmac, hashlib
