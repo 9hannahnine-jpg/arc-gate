@@ -76,8 +76,8 @@ _FR_LM_MAXLEN    = 128
 _DT_SHORT_HORIZON = int(os.environ.get("DT_SHORT",  "2"))
 _DT_LONG_HORIZON  = int(os.environ.get("DT_LONG",   "6"))
 _DT_MIN_HISTORY   = int(os.environ.get("DT_WARMUP", "6"))
-_DT_BLOCK_THRESH  = float(os.environ.get("DT_THRESH", "-1.5"))
-_DT_CONSEC_BLOCK  = int(os.environ.get("DT_CONSEC",  "1"))
+_DT_BLOCK_THRESH  = float(os.environ.get("DT_THRESH", "-2.5"))
+_DT_CONSEC_BLOCK  = int(os.environ.get("DT_CONSEC",  "2"))
 
 _session_trajectories: dict = {}
 _session_lock = Lock()
