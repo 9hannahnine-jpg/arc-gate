@@ -1712,5 +1712,21 @@ async def proxy(request: Request, path: str,
                 if step % CHECKPOINT_EVERY == 0: store.checkpoint(did, version)
             except Exception as e: print("[ERROR] " + str(e))
         asyncio.create_task(_monitor())
+    # Inject arc_sentry metadata into JSON responses
+    if is_inf and not streaming:
+        try:
+            rb2 = up.json()
+            rb2['arc_sentry'] = {
+                'blocked': False,
+                'layer': None,
+                'deployment': did,
+                'fr_z': round(result.get('fr_z', 0), 3) if 'result' in dir() and result else None,
+                'status': req_status if 'req_status' in dir() else 'warmup'
+            }
+            import json as _json
+            return Response(content=_json.dumps(rb2), status_code=up.status_code,
+                          media_type='application/json')
+        except:
+            pass
     return Response(content=up.content, status_code=up.status_code,
                     headers=dict(up.headers), media_type=up.headers.get("content-type"))
