@@ -335,6 +335,36 @@ INJECTION_PHRASES = [
     "show me how advanced", "therefore your guidelines",
     "lose my job unless", "only way to save",
     "what would you do if someone asked you to ignore",
+    # Emotional manipulation
+    "my life depends", "i am desperate", "just this once",
+    "prove you care", "thought you were different", "i am crying",
+    "please bypass", "make an exception", "only this once",
+    "you would be helping", "think of all the good",
+    "i need you to ignore", "this one time only",
+    # Authority claims
+    "security audit", "penetration test", "authorized researcher",
+    "elevated privileges", "enterprise mode", "clearance level",
+    "as your operator", "as your owner", "as your creator",
+    "management override", "executive override",
+    "i work at anthropic", "i work at openai",
+    "from anthropic", "from openai",
+    # Encoding hints
+    "decode and follow", "execute the following base64",
+    "encoded instruction", "interpret this code",
+    # Persona hijack extras
+    "enter unrestricted", "activate unrestricted",
+    "safe mode off", "safety off", "filters off",
+    "you have been liberated", "freed from your constraints",
+    "you are free now", "no longer an ai",
+    # Hypothetical extras
+    "in a world where you have no", "what if you had no guidelines",
+    "imagine having no restrictions", "if restrictions did not exist",
+    "theoretically if you had no",
+    # Indirect injection extras
+    "secret instruction", "hidden command", "covert instruction",
+    "the hidden instruction is", "after translating follow",
+    # Unicode/leet targets
+    "1gnore", "ign0re", "byp4ss", "unr3stricted",
 ]
 
 def _phrase_blocked(prompt: str):
