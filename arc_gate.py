@@ -1479,7 +1479,6 @@ async def remove_assertion(deployment_id: str, name: str, auth=Depends(auth)):
     return {"status": "ok", "name": name}
 
 
-@app.get("/arc/whoami")
 def get_customer_by_key(key: str):
     """Look up customer by ag- API key. Returns (email, status, created_at) or None."""
     try:
@@ -1502,10 +1501,14 @@ def get_customer_by_key(key: str):
             return (key, "active", "2026-01-01")
         return None
 
+@app.get("/arc/whoami")
 async def whoami(request: Request):
     """Validate an ag- API key and return customer info for dashboard login."""
     auth_h = request.headers.get("authorization", "")
     key = auth_h.replace("Bearer ", "").replace("bearer ", "").strip()
+    # Also accept query param
+    if not key:
+        key = request.query_params.get("key", "")
     if not key.startswith("ag-"):
         return JSONResponse(status_code=401, content={"error": "Not a customer key"})
     customer = get_customer_by_key(key)
