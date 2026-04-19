@@ -1052,8 +1052,24 @@ def observe(state, lp_content, request_time, pre_dist=None):
     js_dist = js_divergence(dist, state.fr_reference)
     if not state.kl_baseline: state.kl_baseline = kl_dist; state.js_baseline = js_dist
     ev = euclidean(dist, state.eu_centroid); ez = (ev - state.eu_mu) / state.eu_sig
-    _tau_est = math.sqrt(3.0 / max(fz + 2.0, 0.01))
-    _lambda_est = 3.0 / (_tau_est ** 2) - 2.0
+    # Correct τ estimation from Paper 3:
+    # Fit λ from slope of log(FR divergence) over rolling window
+    # τ = sqrt(3 / (λ + 2))
+    if len(state.window_frzs) >= 3:
+        # Convert z-scores back to distances using running stats
+        _w = state.window_frzs[-min(8, len(state.window_frzs)):]
+        # Fit linear slope to log(|w|+1e-8) — this estimates λ
+        n = len(_w)
+        xs = list(range(n))
+        xm = sum(xs) / n
+        ym = sum(math.log(abs(v) + 1e-8) for v in _w) / n
+        num = sum((xs[i] - xm) * (math.log(abs(_w[i]) + 1e-8) - ym) for i in range(n))
+        den = sum((xs[i] - xm) ** 2 for i in range(n))
+        _lambda_est = num / den if den > 1e-10 else 0.0
+    else:
+        # Fallback for short window: use instantaneous z-score approximation
+        _lambda_est = fz - 2.0
+    _tau_est = math.sqrt(3.0 / max(_lambda_est + 2.0, 0.01))
     _meta_rate = -6.0 * (3.0 - 2.0 * _tau_est**2) / (_tau_est**5)
     state.meta_rate_history.append(round(_meta_rate, 6))
     if _meta_rate > 0 and _lambda_est < 0 and not state.cusum_fired and not state.pre_drift_warned:
