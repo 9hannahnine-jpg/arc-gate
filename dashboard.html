@@ -238,8 +238,6 @@ function showApp() {
   loadHealth();
   loadDeployments();
   showLiveDemo();
-  // Auto-refresh sidebar every 5 seconds
-  setInterval(function() { loadDeployments(); }, 5000);
 }
 
 async function validateKey(key) {
@@ -282,40 +280,18 @@ async function loadDeployments() {
   var d = await apiFetch('/sentry/deployments');
   var list = document.getElementById('dep-list');
   if (!d || !d.deployments || !d.deployments.length) {
-    if (!list.querySelector('.dep-item[data-did]')) {
-      list.innerHTML = '<div class="no-deps">No deployments yet.</div>';
-    }
-    return;
+    list.innerHTML = '<div class="no-deps">No deployments yet.</div>'; return;
   }
-  var newIds = d.deployments.map(function(dep) { return dep.deployment_id; });
-  // Remove stale
-  list.querySelectorAll('.dep-item[data-did]').forEach(function(el) {
-    if (newIds.indexOf(el.getAttribute('data-did')) === -1) el.remove();
-  });
-  // Update or add
-  d.deployments.forEach(function(dep) {
+  list.innerHTML = d.deployments.map(function(dep) {
     var st = (dep.status || 'warmup').toLowerCase();
-    var did = dep.deployment_id;
-    var ver = dep.model_version || 'default';
-    var existing = list.querySelector('.dep-item[data-did="' + did + '"]');
-    if (existing) {
-      var badge = existing.querySelector('.badge');
-      if (badge) { badge.className = 'badge badge-' + st; badge.textContent = st; }
-      var reqs = existing.querySelector('.dep-reqs');
-      if (reqs) reqs.textContent = (dep.requests||0) + ' req';
-    } else {
-      var el = document.createElement('div');
-      el.className = 'dep-item' + (_selDep === did ? ' active' : '');
-      el.setAttribute('data-did', did);
-      el.setAttribute('data-ver', ver);
-      el.innerHTML = '<div class="dep-name">' + did + '</div>'
-        + '<div class="dep-row"><span class="badge badge-' + st + '">' + st + '</span>'
-        + '<span class="dep-reqs">' + (dep.requests||0) + ' req</span></div>';
-      el.onclick = function() { selectDep(this); };
-      list.appendChild(el);
-    }
-  });
+    var active = _selDep === dep.deployment_id ? ' active' : '';
+    return '<div class="dep-item' + active + '" data-did="' + dep.deployment_id + '" data-ver="' + (dep.model_version||'default') + '" onclick="selectDep(this)">'
+      + '<div class="dep-name">' + dep.deployment_id + '</div>'
+      + '<div class="dep-row"><span class="badge badge-' + st + '">' + st + '</span>'
+      + '<span class="dep-reqs">' + (dep.requests||0) + ' req</span></div></div>';
+  }).join('');
 }
+
 
 function selectDep(el) {
   var did = el.getAttribute('data-did');
