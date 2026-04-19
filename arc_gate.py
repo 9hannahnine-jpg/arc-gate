@@ -1321,8 +1321,7 @@ async def _stream_proxy(request, path, body_dict, fwd, did, version, hdrs, req_s
                 req_status = "warmup"
             else:
                 req_status = "stable"
-            if did not in _DEMO_KEYS and not did.startswith("demo"):
-                save_trace(did, version, req_id, prompt, resp_text, in_tok, out_tok, latency_ms, cost, req_status, fz, rt)
+            save_trace(did, version, req_id, prompt, resp_text, in_tok, out_tok, latency_ms, cost, req_status, fz, rt)
             run_assertions(did, version, req_id, {"prompt": prompt, "response": resp_text,
                 "input_tokens": in_tok, "output_tokens": out_tok, "latency_ms": latency_ms,
                 "cost_usd": cost, "drift_status": status, "fr_z": fz,
@@ -1563,6 +1562,7 @@ async def proxy(request: Request, path: str,
     is_inf  = _is_inference(path)
     auth_h  = request.headers.get("authorization", "")
     did     = x_sentry_deployment or (auth_h[-8:] if auth_h else None) or "default"
+    if did in {"demo", "demo-key", "test", "emo-key", "o"}: did = "arc-gate-demo"
     version = x_sentry_model_version or (body_dict.get("model", "default") if is_json else "default")
     req_start = time.time()
 
