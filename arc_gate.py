@@ -1312,13 +1312,17 @@ async def _stream_proxy(request, path, body_dict, fwd, did, version, hdrs, req_s
                 pre_dist = response_to_dist(resp_text) if lp is None and resp_text else None
                 result = observe(state, lp, rt, pre_dist=pre_dist)
             status = result.get("status", ""); step = result.get("step", 0); fz = result.get("fr_z", 0)
-            # Per-request status: use individual FR-Z to classify this request, not deployment state
-            if fz > 3.0:
-                req_status = "drift"
-            elif fz > 2.0:
-                req_status = "elevated"
-            elif step <= 10:
+            # Per-request status: combined FR-Z * log(prompt_length) score (Nine 2026)
+            # Separates short ambiguous prompts (high FR-Z, short) from long attacks (high FR-Z, long)
+            import math as _math
+            _prompt_len = len(prompt) if prompt else 10
+            _combined = fz * _math.log(max(_prompt_len, 10)) / _math.log(50)
+            if step <= 10:
                 req_status = "warmup"
+            elif _combined > 3.1:
+                req_status = "drift"
+            elif _combined > 2.0:
+                req_status = "elevated"
             else:
                 req_status = "stable"
             save_trace(did, version, req_id, prompt, resp_text, in_tok, out_tok, latency_ms, cost, req_status, fz, rt)
