@@ -23,5 +23,5 @@ Part of the **Bendex Geometry** security suite.
 
 ## Related
 
-- **Arc Sentry** — pip package for in-process training stability detection
-- **PyPI: bendex** — `pip install bendex`
+- **Arc Sentry** v3.0.1 — pip package for in-process prompt injection detection
+- **PyPI:** `pip install arc-sentry`
