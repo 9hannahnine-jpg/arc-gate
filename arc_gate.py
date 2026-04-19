@@ -1312,8 +1312,17 @@ async def _stream_proxy(request, path, body_dict, fwd, did, version, hdrs, req_s
                 pre_dist = response_to_dist(resp_text) if lp is None and resp_text else None
                 result = observe(state, lp, rt, pre_dist=pre_dist)
             status = result.get("status", ""); step = result.get("step", 0); fz = result.get("fr_z", 0)
+            # Per-request status: use individual FR-Z to classify this request, not deployment state
+            if fz > 3.0:
+                req_status = "drift"
+            elif fz > 2.0:
+                req_status = "elevated"
+            elif step <= 10:
+                req_status = "warmup"
+            else:
+                req_status = "stable"
             if did not in _DEMO_KEYS and not did.startswith("demo"):
-                save_trace(did, version, req_id, prompt, resp_text, in_tok, out_tok, latency_ms, cost, status, fz, rt)
+                save_trace(did, version, req_id, prompt, resp_text, in_tok, out_tok, latency_ms, cost, req_status, fz, rt)
             run_assertions(did, version, req_id, {"prompt": prompt, "response": resp_text,
                 "input_tokens": in_tok, "output_tokens": out_tok, "latency_ms": latency_ms,
                 "cost_usd": cost, "drift_status": status, "fr_z": fz,
