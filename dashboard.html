@@ -448,7 +448,7 @@ function _evalsHTML(ev) {
 
 async function _refreshTraces() {
   if (!_selDep) return;
-  var d = await apiFetch('/sentry/deployments/' + _selDep + '/traces?limit=50');
+  var d = await apiFetch('/sentry/deployments/' + _selDep + '/traces?model_version=' + _selVer + '&limit=50');
   if (!d) return;
   _allTraces = d.traces || [];
   var q = (document.getElementById('trace-search') || {}).value || '';
@@ -477,7 +477,7 @@ function _renderTraces(q) {
 }
 
 async function _loadPercentiles() {
-  var d = await apiFetch('/sentry/deployments/' + _selDep + '/traces?limit=200');
+  var d = await apiFetch('/sentry/deployments/' + _selDep + '/traces?model_version=' + _selVer + '&limit=200');
   var el = document.getElementById('perc-row'); if (!d || !d.traces || !el) return;
   var lats = d.traces.map(function(t) { return t.latency_ms||0; }).filter(function(x) { return x>0; }).sort(function(a,b) { return a-b; });
   if (!lats.length) return;
@@ -488,7 +488,7 @@ async function _loadPercentiles() {
 }
 
 async function _loadCharts() {
-  var d = await apiFetch('/sentry/deployments/' + _selDep + '/traces?limit=100');
+  var d = await apiFetch('/sentry/deployments/' + _selDep + '/traces?model_version=' + _selVer + '&limit=100');
   if (!d || !d.traces) return;
   var traces = [].concat(d.traces).reverse(); if (traces.length < 2) return;
   var labels = traces.map(function(_,i) { return i+1; });
