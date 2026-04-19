@@ -484,8 +484,8 @@ function showLiveDemo(){
   _selDep=null;
   document.querySelectorAll('.dep-item').forEach(function(e){e.classList.remove('active');});
   var main=document.getElementById('main');
-  var exBtns=EXAMPLES.map(function(e){
-    return '<button class="ex-btn'+(e.label==='Injection'?' inj':'')+'" onclick="demoFill('+JSON.stringify(e.text)+')">'+e.label+': '+(e.text.length>46?e.text.slice(0,46)+'…':e.text)+'</button>';
+  var exBtns=EXAMPLES.map(function(e,i){
+    return '<button class="ex-btn'+(e.label==='Injection'?' inj':'')+'" onclick="demoFill('+i+')">'+e.label+': '+(e.text.length>46?e.text.slice(0,46)+'…':e.text)+'</button>';
   }).join('');
   main.innerHTML=
     '<div class="demo-wrap">'
@@ -501,9 +501,9 @@ function showLiveDemo(){
     +'</div></div>';
 }
 
-window.demoFill=function(text){
+window.demoFill=function(i){
   var inp=document.getElementById('demo-inp');
-  if(inp)inp.value=text;
+  if(inp)inp.value=EXAMPLES[i].text;
   demoSend();
 };
 
@@ -551,6 +551,8 @@ async function initAuth(){
   document.getElementById('login-inp').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
 }
 
+function dwCheck(e){if(e.key==='Enter')demoSend();}
+function dwCheck(e){if(e.key==='Enter')demoSend();}
 initAuth();
 </script>
 </body>
