@@ -238,6 +238,8 @@ function showApp() {
   loadHealth();
   loadDeployments();
   showLiveDemo();
+  // Auto-refresh sidebar every 5 seconds
+  setInterval(function() { loadDeployments(); }, 5000);
 }
 
 async function validateKey(key) {
