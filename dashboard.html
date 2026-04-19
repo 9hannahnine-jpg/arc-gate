@@ -463,7 +463,7 @@ function _renderTraces(q) {
   if (q) traces = traces.filter(function(t) { return (t.prompt||'').toLowerCase().indexOf(q.toLowerCase()) >= 0; });
   if (!traces.length) { el.innerHTML = '<div style="padding:16px;" class="dim mono">No traces' + (q?' matching "'+q+'"':'') + '.</div>'; return; }
   var rows = traces.map(function(t) {
-    var st = (t.drift_status || 'warmup');
+    var st = (t.drift_status || 'warmup').toLowerCase();
     var stColor = st==='stable'?'var(--green)':st==='drift'?'var(--danger)':st==='elevated'?'var(--warn)':'var(--info)';
     var stIcon = st==='stable'?'✓':st==='drift'?'⚠':st==='elevated'?'△':'·';
     return '<tr><td title="'+(t.prompt||'')+'">'+(t.prompt||'').slice(0,55).replace(/</g,'&lt;')+'</td>'
