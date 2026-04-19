@@ -285,15 +285,17 @@ async function loadDeployments() {
   list.innerHTML = d.deployments.map(function(dep) {
     var st = (dep.status || 'warmup').toLowerCase();
     var active = _selDep === dep.deployment_id ? ' active' : '';
-    return '<div class="dep-item' + active + '" onclick="selectDep('' + dep.deployment_id + '','' + (dep.model_version||'default') + '',this)">'
+    return '<div class="dep-item' + active + '" data-did="' + dep.deployment_id + '" data-ver="' + (dep.model_version||'default') + '" onclick="selectDep(this)">'
       + '<div class="dep-name">' + dep.deployment_id + '</div>'
       + '<div class="dep-row"><span class="badge badge-' + st + '">' + st + '</span>'
       + '<span class="dep-reqs">' + (dep.requests||0) + ' req</span></div></div>';
   }).join('');
 }
 
-function selectDep(did, ver, el) {
-  _selDep = did; _selVer = ver || 'default';
+function selectDep(el) {
+  var did = el.getAttribute('data-did');
+  var ver = el.getAttribute('data-ver') || 'default';
+  _selDep = did; _selVer = ver;
   document.querySelectorAll('.dep-item').forEach(function(e) { e.classList.remove('active'); });
   if (el) el.classList.add('active');
   if (_refreshTimer) clearInterval(_refreshTimer);
