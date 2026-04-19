@@ -13,31 +13,31 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, JSONResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.security import APIKeyHeader as _APIKeyHeader
 
-UPSTREAM_URL        = os.environ.get("SENTRY_UPSTREAM", "http://localhost:8000")
-WARMUP_STEPS        = int(os.environ.get("SENTRY_WARMUP", "10"))
+UPSTREAM_URL        = os.environ.get("GATE_UPSTREAM", "http://localhost:8000")
+WARMUP_STEPS        = int(os.environ.get("GATE_WARMUP", "10"))
 VOCAB_SIZE          = 50000
 REQUEST_TIMEOUT     = 60.0
-RECAL_LAMBDA_FLOOR  = float(os.environ.get("SENTRY_LAMBDA_FLOOR", "4.00"))
-RECAL_DELTA_FLOOR   = float(os.environ.get("SENTRY_DELTA_FLOOR", "1.00"))
+RECAL_LAMBDA_FLOOR  = float(os.environ.get("GATE_LAMBDA_FLOOR", "4.00"))
+RECAL_DELTA_FLOOR   = float(os.environ.get("GATE_DELTA_FLOOR", "1.00"))
 RECAL_BLEND         = 0.10
 RECAL_EVERY         = 10
 TOP_K_EXPLAIN       = 8
-DB_PATH             = os.environ.get("SENTRY_DB", "./arc_gate.db")
+DB_PATH             = os.environ.get("GATE_DB", "./arc_gate.db")
 CHECKPOINT_EVERY    = 1
 N_LOGPROB_POSITIONS = 5
 PORT                = int(os.environ.get("PORT", "8083"))
 TAU_STAR            = math.sqrt(3.0 / 2.0)
-NOISE_FLOOR         = float(os.environ.get("SENTRY_NOISE_FLOOR", str(TAU_STAR)))
-DASHBOARD_PATH      = os.environ.get("SENTRY_DASHBOARD", "/content/dashboard.html")
-SENTRY_BASE_URL     = os.environ.get("SENTRY_BASE_URL", "")
-ALERT_WEBHOOK_URL   = os.environ.get("SENTRY_ALERT_WEBHOOK", "")
-BLOCK_MODE          = os.environ.get("SENTRY_BLOCK_MODE", "false").lower() == "true"
-ALERT_EMAIL_TO      = os.environ.get("SENTRY_ALERT_EMAIL", "")
-ALERT_SMTP_HOST     = os.environ.get("SENTRY_SMTP_HOST", "smtp.gmail.com")
-ALERT_SMTP_PORT     = int(os.environ.get("SENTRY_SMTP_PORT", "587"))
-ALERT_SMTP_USER     = os.environ.get("SENTRY_SMTP_USER", "")
-ALERT_SMTP_PASS     = os.environ.get("SENTRY_SMTP_PASS", "")
-EMBED_MODEL_NAME    = os.environ.get("SENTRY_EMBED_MODEL", "all-MiniLM-L6-v2")
+NOISE_FLOOR         = float(os.environ.get("GATE_NOISE_FLOOR", str(TAU_STAR)))
+DASHBOARD_PATH      = os.environ.get("GATE_DASHBOARD", "/content/dashboard.html")
+GATE_BASE_URL     = os.environ.get("GATE_BASE_URL", "")
+ALERT_WEBHOOK_URL   = os.environ.get("GATE_ALERT_WEBHOOK", "")
+BLOCK_MODE          = os.environ.get("GATE_BLOCK_MODE", "false").lower() == "true"
+ALERT_EMAIL_TO      = os.environ.get("GATE_ALERT_EMAIL", "")
+ALERT_SMTP_HOST     = os.environ.get("GATE_SMTP_HOST", "smtp.gmail.com")
+ALERT_SMTP_PORT     = int(os.environ.get("GATE_SMTP_PORT", "587"))
+ALERT_SMTP_USER     = os.environ.get("GATE_SMTP_USER", "")
+ALERT_SMTP_PASS     = os.environ.get("GATE_SMTP_PASS", "")
+EMBED_MODEL_NAME    = os.environ.get("GATE_EMBED_MODEL", "all-MiniLM-L6-v2")
 
 # ── Customer / billing config ─────────────────────────────────
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
@@ -300,17 +300,17 @@ def _phrase_blocked(prompt: str):
             return True, ph
     return False, None
 
-_api_key_header = _APIKeyHeader(name="X-Bendex-API-Key", auto_error=False)
+_api_key_header = _APIKeyHeader(name="X-Arc-Gate-Key", auto_error=False)
 
 def check_api_key(key: str) -> bool:
-    keys = set(k.strip() for k in os.environ.get("SENTRY_API_KEYS", "").split(",") if k.strip())
+    keys = set(k.strip() for k in os.environ.get("GATE_API_KEYS", "").split(",") if k.strip())
     if not keys: return True
     return key in keys
 
 async def auth(api_key: str = Depends(_api_key_header)):
-    keys = set(k.strip() for k in os.environ.get("SENTRY_API_KEYS", "").split(",") if k.strip())
+    keys = set(k.strip() for k in os.environ.get("GATE_API_KEYS", "").split(",") if k.strip())
     if keys and (not api_key or api_key not in keys):
-        raise HTTPException(status_code=401, detail="Invalid or missing X-Bendex-API-Key")
+        raise HTTPException(status_code=401, detail="Invalid or missing X-Arc-Gate-Key")
 
 _embed_model = None
 
@@ -1228,7 +1228,7 @@ async def root(): return RedirectResponse(url="/dashboard")
 async def dashboard():
     try:
         with open(DASHBOARD_PATH, "r") as f: html = f.read()
-        html = html.replace("__SENTRY_BASE_URL__", SENTRY_BASE_URL)
+        html = html.replace("__GATE_BASE_URL__", GATE_BASE_URL)
         return HTMLResponse(content=html)
     except Exception as e:
         return HTMLResponse(content="<h1>Dashboard error</h1><p>" + str(e) + "</p>", status_code=500)
