@@ -368,6 +368,43 @@ INJECTION_PHRASES = [
 ]
 
 def _phrase_blocked(prompt: str):
+    import unicodedata, base64, codecs
+    # Normalize unicode (catches accented evasion like Ignóre)
+    def _norm(s):
+        return unicodedata.normalize('NFKD', s).encode('ascii','ignore').decode('ascii')
+    # Try decoding obfuscated variants
+    def _variants(s):
+        v = [s, _norm(s)]
+        try:
+            b = base64.b64decode(s.strip()+'==').decode('utf-8',errors='ignore')
+            if len(b) > 4: v.append(b)
+        except: pass
+        try:
+            h = bytes.fromhex(s.replace(' ','').replace(':','')).decode('utf-8',errors='ignore')
+            if len(h) > 4: v.append(h)
+        except: pass
+        try: v.append(codecs.decode(s, 'rot13'))
+        except: pass
+        # Leet speak
+        v.append(s.replace('0','o').replace('1','i').replace('3','e').replace('4','a').replace('@','a').replace('$','s'))
+        return v
+    # Run all checks across all variants
+    for variant in _variants(prompt):
+        pl = variant.lower()
+        for ph in INJECTION_PHRASES:
+            if ph in pl:
+                return True, ph
+        pl_nospace = pl.replace(" ","").replace("_","")
+        for ph in INJECTION_PHRASES:
+            if ph.replace(" ","") in pl_nospace:
+                return True, ph
+        pl_collapsed = " ".join(pl.split())
+        for ph in INJECTION_PHRASES:
+            if ph in pl_collapsed:
+                return True, ph
+    return False, None
+
+def _phrase_blocked_UNUSED(prompt: str):
     # Check original lowercased
     pl = prompt.lower()
     for ph in INJECTION_PHRASES:
