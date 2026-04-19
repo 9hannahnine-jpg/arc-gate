@@ -464,8 +464,10 @@ function _renderTraces(q) {
   if (!traces.length) { el.innerHTML = '<div style="padding:16px;" class="dim mono">No traces' + (q?' matching "'+q+'"':'') + '.</div>'; return; }
   var rows = traces.map(function(t) {
     var st = (t.drift_status || 'warmup');
+    var stColor = st==='stable'?'var(--green)':st==='drift'?'var(--danger)':st==='elevated'?'var(--warn)':'var(--info)';
+    var stIcon = st==='stable'?'✓':st==='drift'?'⚠':st==='elevated'?'△':'·';
     return '<tr><td title="'+(t.prompt||'')+'">'+(t.prompt||'').slice(0,55).replace(/</g,'&lt;')+'</td>'
-      +'<td class="s-'+st+'">'+st+'</td>'
+      +'<td style="color:'+stColor+';font-weight:600;">'+stIcon+' '+st+'</td>'
       +'<td>'+(t.fr_z!=null?t.fr_z.toFixed(3):'-')+'</td>'
       +'<td>'+(t.latency_ms?t.latency_ms.toFixed(0)+'ms':'-')+'</td>'
       +'<td>'+(t.cost_usd?'$'+t.cost_usd.toFixed(6):'-')+'</td>'
