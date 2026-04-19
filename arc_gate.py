@@ -1479,6 +1479,16 @@ async def remove_assertion(deployment_id: str, name: str, auth=Depends(auth)):
     return {"status": "ok", "name": name}
 
 
+def is_valid_customer_key(key: str) -> bool:
+    """Check if an ag- key is valid."""
+    if not key or not key.startswith('ag-'):
+        return False
+    keys = set(k.strip() for k in os.environ.get("GATE_API_KEYS", "").split(",") if k.strip())
+    if keys and key in keys:
+        return True
+    result = get_customer_by_key(key)
+    return result is not None and result[1] == "active"
+
 def get_customer_by_key(key: str):
     """Look up customer by ag- API key. Returns (email, status, created_at) or None."""
     try:
