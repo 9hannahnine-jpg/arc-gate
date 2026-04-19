@@ -1480,6 +1480,28 @@ async def remove_assertion(deployment_id: str, name: str, auth=Depends(auth)):
 
 
 @app.get("/arc/whoami")
+def get_customer_by_key(key: str):
+    """Look up customer by ag- API key. Returns (email, status, created_at) or None."""
+    try:
+        # First check GATE_API_KEYS env var - simple key list for self-hosted
+        keys = set(k.strip() for k in os.environ.get("GATE_API_KEYS", "").split(",") if k.strip())
+        if keys and key in keys:
+            return (key, "active", "2026-01-01")
+        # Then check customers DB
+        conn = sqlite3.connect(DB_PATH)
+        row = conn.execute(
+            "SELECT email, status, created_at FROM customers WHERE api_key=?", (key,)
+        ).fetchone()
+        conn.close()
+        return row
+    except Exception as e:
+        print(f"[DB] get_customer_by_key error: {e}")
+        # Fallback: if GATE_API_KEYS has entries and key matches, allow
+        keys = set(k.strip() for k in os.environ.get("GATE_API_KEYS", "").split(",") if k.strip())
+        if key in keys:
+            return (key, "active", "2026-01-01")
+        return None
+
 async def whoami(request: Request):
     """Validate an ag- API key and return customer info for dashboard login."""
     auth_h = request.headers.get("authorization", "")
