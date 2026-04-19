@@ -267,7 +267,10 @@ async function doLogin() {
 
 async function apiFetch(path) {
   var hdrs = {'Content-Type': 'application/json'};
-  if (_apiKey) hdrs['Authorization'] = 'Bearer ' + _apiKey;
+  if (_apiKey) {
+    hdrs['Authorization'] = 'Bearer ' + _apiKey;
+    hdrs['X-Arc-Gate-Key'] = _apiKey;
+  }
   try { return await (await fetch(API + path, {headers: hdrs})).json(); } catch(e) { return null; }
 }
 
