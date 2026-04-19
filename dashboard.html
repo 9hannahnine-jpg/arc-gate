@@ -353,11 +353,11 @@ async function renderDetail() {
     + '<div class="summary-cell"><div class="summary-val val-tau" id="sv-tau">' + (tau?tau.toFixed(4):'-') + '</div><div class="summary-lbl">tau estimate</div></div>'
     + '</div>'
     + '<div class="tabs">'
-    + '<button class="tab active" onclick="switchTab('overview',this)">Overview</button>'
-    + '<button class="tab" onclick="switchTab('traces',this)">Traces</button>'
-    + '<button class="tab" onclick="switchTab('cost',this)">Cost</button>'
-    + '<button class="tab" onclick="switchTab('security',this)">Security</button>'
-    + '<button class="tab" onclick="switchTab('evals',this)">Evals</button>'
+    + '<button class="tab active" data-tab="overview" onclick="switchTab(this)">Overview</button>'
+    + '<button class="tab" data-tab="traces" onclick="switchTab(this)">Traces</button>'
+    + '<button class="tab" data-tab="cost" onclick="switchTab(this)">Cost</button>'
+    + '<button class="tab" data-tab="security" onclick="switchTab(this)">Security</button>'
+    + '<button class="tab" data-tab="evals" onclick="switchTab(this)">Evals</button>'
     + '</div>'
     + '<div class="tab-content active" id="tab-overview">'
     + '<div class="chart-grid">'
@@ -397,7 +397,8 @@ async function renderDetail() {
   _loadPercentiles();
 }
 
-function switchTab(name, btn) {
+function switchTab(btn) {
+  var name = btn.getAttribute('data-tab');
   document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
   document.querySelectorAll('.tab-content').forEach(function(t) { t.classList.remove('active'); });
   btn.classList.add('active');
