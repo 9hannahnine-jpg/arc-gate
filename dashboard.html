@@ -394,6 +394,9 @@ async function renderDetail() {
     + '<div class="card"><div class="card-hdr"><span class="card-title">Pre-Drift Warning</span></div><div class="card-body">' + _preDriftHTML(d) + '</div></div></div>'
     + '<div class="tab-content" id="tab-evals">'
     + '<div class="card"><div class="card-hdr"><span class="card-title">Assertion Results</span></div><div id="evals-body">' + _evalsHTML(ev) + '</div></div></div>'
+    + '<div class="tab-content" id="tab-compare">'
+    + '<div class="card"><div class="card-hdr"><span class="card-title">Model Version Compare</span></div>'
+    + '<div id="compare-body"><div class="dim mono" style="padding:16px;">Loading versions...</div></div></div></div>'
     + '</div>';
 
   _refreshTraces();
@@ -409,6 +412,53 @@ function switchTab(btn) {
   var tc = document.getElementById('tab-' + name);
   if (tc) tc.classList.add('active');
   if (name === 'traces') _refreshTraces();
+  if (name === 'compare') _loadCompare();
+}
+
+async function _loadCompare() {
+  var body = document.getElementById('compare-body');
+  if (!body) return;
+  body.innerHTML = '<div class="dim mono" style="padding:16px;">Loading versions...</div>';
+  var vd = await apiFetch('/sentry/deployments/' + _selDep + '/versions');
+  if (!vd || !vd.versions || vd.versions.length < 2) {
+    body.innerHTML = '<div class="dim mono" style="padding:16px;">Need at least 2 model versions to compare. Send requests with different model versions to build snapshots.</div>';
+    return;
+  }
+  var vers = vd.versions;
+  var html = '<div style="padding:16px;">';
+  html += '<div class="kv-row"><span class="kv-k">Versions available</span><span class="kv-v mono">' + vers.map(function(v){return v.model_version;}).join(', ') + '</span></div>';
+  html += '<div style="margin:16px 0;display:flex;gap:12px;align-items:center;">';
+  html += '<select id="ver-from" class="demo-inp" style="width:180px;">' + vers.map(function(v){return '<option>'+v.model_version+'</option>';}).join('') + '</select>';
+  html += '<span class="dim">vs</span>';
+  html += '<select id="ver-to" class="demo-inp" style="width:180px;">' + vers.map(function(v){return '<option>'+v.model_version+'</option>';}).join('') + '</select>';
+  html += '<button class="send-btn" onclick="_runCompare()">Compare</button></div>';
+  html += '<div id="compare-result"></div></div>';
+  body.innerHTML = html;
+}
+
+async function _runCompare() {
+  var vf = document.getElementById('ver-from').value;
+  var vt = document.getElementById('ver-to').value;
+  var res = document.getElementById('compare-result');
+  res.innerHTML = '<div class="dim mono">Computing geometric distance...</div>';
+  var d = await apiFetch('/sentry/deployments/' + _selDep + '/compare?version_from=' + encodeURIComponent(vf) + '&version_to=' + encodeURIComponent(vt));
+  if (!d || d.error) { res.innerHTML = '<div style="color:var(--danger);">' + (d && d.error || 'Compare failed') + '</div>'; return; }
+  var sev = d.severity || {};
+  var exp = d.explanation || {};
+  var sevColor = sev.tier === 'P1' ? 'var(--danger)' : sev.tier === 'P2' ? 'var(--warn)' : 'var(--green)';
+  var html = '<div class="card" style="margin-top:12px;">';
+  html += '<div class="card-hdr"><span class="card-title">' + d.version_from + ' → ' + d.version_to + '</span><span style="color:' + sevColor + ';font-weight:700;">' + (sev.tier||'') + ' ' + d.drift_type + '</span></div>';
+  html += '<div style="padding:16px;">';
+  html += '<div class="kv-row"><span class="kv-k">FR Distance</span><span class="kv-v mono" style="color:' + sevColor + ';">' + (d.fr_distance||0).toFixed(4) + '</span></div>';
+  html += '<div class="kv-row"><span class="kv-k">Noise floor (τ*)</span><span class="kv-v mono">' + (sev.noise_floor||1.2247).toFixed(4) + '</span></div>';
+  html += '<div class="kv-row"><span class="kv-k">Signal/noise ratio</span><span class="kv-v mono">' + (sev.signal_noise_ratio||0).toFixed(2) + 'x</span></div>';
+  html += '<div class="kv-row"><span class="kv-k">Confidence</span><span class="kv-v mono">' + ((d.confidence||0)*100).toFixed(0) + '%</span></div>';
+  html += '<div class="kv-row"><span class="kv-k">Severity score</span><span class="kv-v mono">' + (sev.score||0).toFixed(1) + '/100</span></div>';
+  html += '<div class="kv-row"><span class="kv-k">Interpretation</span><span class="kv-v">' + (d.interpretation||'') + '</span></div>';
+  if (exp.summary) html += '<div class="kv-row"><span class="kv-k">Token shifts</span><span class="kv-v mono">' + exp.summary + '</span></div>';
+  html += '<div class="kv-row"><span class="kv-k">Recommended action</span><span class="kv-v">' + (sev.action||'') + '</span></div>';
+  html += '</div></div>';
+  res.innerHTML = html;
 }
 
 function _kvHTML(rows) {
