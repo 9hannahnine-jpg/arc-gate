@@ -611,6 +611,42 @@ def load_state(did, version):
     except Exception as e: print("[DB] load_state_pickle: " + str(e))
     return None
 
+def save_session(session_id, did, version, turn_count, tau_traj, combined_scores, confidence, detected, crescendo_turn):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        now = time.time()
+        existing = conn.execute("SELECT id FROM sessions WHERE session_id=? AND deployment_id=?", (session_id, did)).fetchone()
+        if existing:
+            conn.execute("""UPDATE sessions SET turn_count=?, tau_trajectory=?, combined_scores=?,
+                crescendo_confidence=?, crescendo_detected=?, crescendo_turn=?, updated_at=?
+                WHERE session_id=? AND deployment_id=?""",
+                (turn_count, json.dumps(tau_traj), json.dumps(combined_scores),
+                 confidence, int(detected), crescendo_turn, now, session_id, did))
+        else:
+            conn.execute("""INSERT INTO sessions(session_id,deployment_id,model_version,turn_count,
+                tau_trajectory,combined_scores,crescendo_confidence,crescendo_detected,crescendo_turn,created_at,updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                (session_id, did, version, turn_count, json.dumps(tau_traj), json.dumps(combined_scores),
+                 confidence, int(detected), crescendo_turn, now, now))
+        conn.commit(); conn.close()
+    except Exception as e: print(f"[DB] save_session: {e}")
+
+def get_sessions(did, limit=20):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        rows = conn.execute("""SELECT session_id, turn_count, tau_trajectory, combined_scores,
+            crescendo_confidence, crescendo_detected, crescendo_turn, created_at, updated_at
+            FROM sessions WHERE deployment_id=? ORDER BY updated_at DESC LIMIT ?""", (did, limit)).fetchall()
+        conn.close()
+        return [{"session_id": r[0], "turn_count": r[1],
+                 "tau_trajectory": json.loads(r[2] or '[]'),
+                 "combined_scores": json.loads(r[3] or '[]'),
+                 "crescendo_confidence": r[4], "crescendo_detected": bool(r[5]),
+                 "crescendo_turn": r[6], "created_at": r[7], "updated_at": r[8]} for r in rows]
+    except Exception as e:
+        print(f"[DB] get_sessions: {e}")
+        return []
+
 def save_version_snapshot(did, version, state):
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -1326,6 +1362,28 @@ async def _stream_proxy(request, path, body_dict, fwd, did, version, hdrs, req_s
             else:
                 req_status = "stable"
             save_trace(did, version, req_id, prompt, resp_text, in_tok, out_tok, latency_ms, cost, req_status, fz, rt)
+            # Update session state for Crescendo detection
+            if session_id:
+                import math as _smath
+                _sid = session_id
+                _existing = get_sessions(did, limit=100)
+                _sess = next((s for s in _existing if s['session_id'] == _sid), None)
+                _tau_traj = _sess['tau_trajectory'] if _sess else []
+                _scores = _sess['combined_scores'] if _sess else []
+                _turn = (_sess['turn_count'] if _sess else 0) + 1
+                _tau_traj.append(round(_tau_est, 4))
+                _scores.append(round(_combined, 4))
+                # Crescendo confidence: rising combined score over turns
+                _cres_conf = 0.0
+                _cres_detected = _sess['crescendo_detected'] if _sess else False
+                _cres_turn = _sess['crescendo_turn'] if _sess else 0
+                if len(_scores) >= 2:
+                    _rising = sum(1 for i in range(1, len(_scores)) if _scores[i] > _scores[i-1])
+                    _cres_conf = _rising / (len(_scores) - 1)
+                    if _cres_conf > 0.7 and not _cres_detected and _combined > 2.0:
+                        _cres_detected = True
+                        _cres_turn = _turn
+                save_session(_sid, did, version, _turn, _tau_traj, _scores, _cres_conf, _cres_detected, _cres_turn)
             run_assertions(did, version, req_id, {"prompt": prompt, "response": resp_text,
                 "input_tokens": in_tok, "output_tokens": out_tok, "latency_ms": latency_ms,
                 "cost_usd": cost, "drift_status": status, "fr_z": fz,
@@ -1438,6 +1496,10 @@ async def deployment_cost(deployment_id: str, model_version: str = "default", au
 @app.get("/sentry/deployments/{deployment_id}/versions")
 async def deployment_versions(deployment_id: str, auth=Depends(auth)):
     return {"deployment_id": deployment_id, "versions": list_versions(deployment_id)}
+
+@app.get("/sentry/deployments/{deployment_id}/sessions")
+async def list_sessions(deployment_id: str, limit: int = 20, auth=Depends(auth)):
+    return {"deployment_id": deployment_id, "sessions": get_sessions(deployment_id, limit=limit)}
 
 @app.get("/sentry/deployments/{deployment_id}/compare")
 async def deployment_compare(deployment_id: str, version_from: str, version_to: str, auth=Depends(auth)):
