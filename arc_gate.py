@@ -1760,7 +1760,36 @@ async def proxy(request: Request, path: str,
                     pre_dist = response_to_dist(response) if lp is None and response else None
                     result = observe(state, lp, rt, pre_dist=pre_dist)
                 status = result.get("status", ""); step = result.get("step", 0); fz = result.get("fr_z", 0)
-                save_trace(did, version, req_id, prompt, response, in_tok, out_tok, latency_ms, cost, status, fz, rt)
+                import math as _math2
+                _prompt_len2 = len(prompt) if prompt else 10
+                _combined2 = fz * _math2.log(max(_prompt_len2, 10)) / _math2.log(50)
+                if step <= 10:
+                    req_status2 = "warmup"
+                elif _combined2 > 3.1:
+                    req_status2 = "drift"
+                elif _combined2 > 2.0:
+                    req_status2 = "elevated"
+                else:
+                    req_status2 = "stable"
+                save_trace(did, version, req_id, prompt, response, in_tok, out_tok, latency_ms, cost, req_status2, fz, rt)
+                if session_id:
+                    _existing2 = get_sessions(did, limit=100)
+                    _sess2 = next((s for s in _existing2 if s['session_id'] == session_id), None)
+                    _tau_traj2 = _sess2['tau_trajectory'] if _sess2 else []
+                    _scores2 = _sess2['combined_scores'] if _sess2 else []
+                    _turn2 = (_sess2['turn_count'] if _sess2 else 0) + 1
+                    _tau_traj2.append(round(_tau_est, 4))
+                    _scores2.append(round(_combined2, 4))
+                    _cres_conf2 = 0.0
+                    _cres_detected2 = _sess2['crescendo_detected'] if _sess2 else False
+                    _cres_turn2 = _sess2['crescendo_turn'] if _sess2 else 0
+                    if len(_scores2) >= 2:
+                        _rising2 = sum(1 for i in range(1, len(_scores2)) if _scores2[i] > _scores2[i-1])
+                        _cres_conf2 = _rising2 / (len(_scores2) - 1)
+                        if _cres_conf2 > 0.7 and not _cres_detected2 and _combined2 > 2.0:
+                            _cres_detected2 = True
+                            _cres_turn2 = _turn2
+                    save_session(session_id, did, version, _turn2, _tau_traj2, _scores2, _cres_conf2, _cres_detected2, _cres_turn2)
                 run_assertions(did, version, req_id, {"prompt": prompt, "response": response,
                     "input_tokens": in_tok, "output_tokens": out_tok, "latency_ms": latency_ms,
                     "cost_usd": cost, "drift_status": status, "fr_z": fz,
