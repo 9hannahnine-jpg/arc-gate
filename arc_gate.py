@@ -1789,7 +1789,9 @@ async def proxy(request: Request, path: str,
                         if _cres_conf2 > 0.7 and not _cres_detected2 and _combined2 > 2.0:
                             _cres_detected2 = True
                             _cres_turn2 = _turn2
+                    print(f"[SESSION] Saving session {session_id} turn {_turn2} scores {_scores2}")
                     save_session(session_id, did, version, _turn2, _tau_traj2, _scores2, _cres_conf2, _cres_detected2, _cres_turn2)
+                    print(f"[SESSION] Saved ok")
                 run_assertions(did, version, req_id, {"prompt": prompt, "response": response,
                     "input_tokens": in_tok, "output_tokens": out_tok, "latency_ms": latency_ms,
                     "cost_usd": cost, "drift_status": status, "fr_z": fz,
