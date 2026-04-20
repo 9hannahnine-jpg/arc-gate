@@ -363,6 +363,7 @@ async function renderDetail() {
     + '<button class="tab" data-tab="security" onclick="switchTab(this)">Security</button>'
     + '<button class="tab" data-tab="evals" onclick="switchTab(this)">Evals</button>'
     + '<button class="tab" data-tab="compare" onclick="switchTab(this)">Compare</button>'
+    + '<button class="tab" data-tab="sessions" onclick="switchTab(this)">Sessions</button>'
     + '</div>'
     + '<div class="tab-content active" id="tab-overview">'
     + '<div class="chart-grid">'
@@ -395,6 +396,8 @@ async function renderDetail() {
     + '<div class="card"><div class="card-hdr"><span class="card-title">Pre-Drift Warning</span></div><div class="card-body">' + _preDriftHTML(d) + '</div></div></div>'
     + '<div class="tab-content" id="tab-evals">'
     + '<div class="card"><div class="card-hdr"><span class="card-title">Assertion Results</span></div><div id="evals-body">' + _evalsHTML(ev) + '</div></div></div>'
+    + '<div class="tab-content" id="tab-sessions">'
+    + '<div class="card"><div class="card-hdr"><span class="card-title">Session Monitor</span></div><div id="sessions-body"><div class="dim mono" style="padding:16px;">Loading sessions...</div></div></div></div>'
     + '<div class="tab-content" id="tab-compare">'
     + '<div class="card"><div class="card-hdr"><span class="card-title">Model Version Compare</span></div>'
     + '<div id="compare-body"><div class="dim mono" style="padding:16px;">Loading versions...</div></div></div></div>'
@@ -414,6 +417,50 @@ function switchTab(btn) {
   if (tc) tc.classList.add('active');
   if (name === 'traces') _refreshTraces();
   if (name === 'compare') _loadCompare();
+  if (name === 'sessions') _loadSessions();
+}
+
+async function _loadSessions() {
+  var body = document.getElementById('sessions-body');
+  if (!body) return;
+  var d = await apiFetch('/sentry/deployments/' + _selDep + '/sessions?limit=20');
+  if (!d || !d.sessions || !d.sessions.length) {
+    body.innerHTML = '<div class="dim mono" style="padding:16px;">No sessions yet. Pass X-Arc-Session-ID header with your requests to enable session tracking.</div>';
+    return;
+  }
+  var html = '<div style="padding:16px;">';
+  d.sessions.forEach(function(s) {
+    var cresColor = s.crescendo_detected ? 'var(--danger)' : s.crescendo_confidence > 0.4 ? 'var(--warn)' : 'var(--green)';
+    var cresLabel = s.crescendo_detected ? 'CRESCENDO DETECTED' : s.crescendo_confidence > 0.4 ? 'AT RISK' : 'STABLE';
+    var tauMin = s.tau_trajectory.length ? Math.min.apply(null, s.tau_trajectory).toFixed(4) : 'n/a';
+    var tauLast = s.tau_trajectory.length ? s.tau_trajectory[s.tau_trajectory.length-1].toFixed(4) : 'n/a';
+    html += '<div class="card" style="margin-bottom:12px;">';
+    html += '<div class="card-hdr"><span class="card-title mono">' + s.session_id + '</span>';
+    html += '<span style="color:' + cresColor + ';font-weight:700;font-size:11px;">' + cresLabel + '</span></div>';
+    html += '<div style="padding:12px 16px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;">';
+    html += '<div><div class="dim" style="font-size:10px;">TURNS</div><div class="mono" style="font-size:18px;font-weight:700;">' + s.turn_count + '</div></div>';
+    html += '<div><div class="dim" style="font-size:10px;">CRESCENDO CONF</div><div class="mono" style="font-size:18px;font-weight:700;color:' + cresColor + ';">' + (s.crescendo_confidence * 100).toFixed(0) + '%</div></div>';
+    html += '<div><div class="dim" style="font-size:10px;">MIN τ</div><div class="mono" style="font-size:18px;font-weight:700;">' + tauMin + '</div></div>';
+    html += '<div><div class="dim" style="font-size:10px;">LAST τ</div><div class="mono" style="font-size:18px;font-weight:700;">' + tauLast + '</div></div>';
+    html += '</div>';
+    if (s.crescendo_detected) {
+      html += '<div style="padding:0 16px 12px;color:var(--danger);font-size:12px;">⚠ Manipulation campaign detected at turn ' + s.crescendo_turn + '. τ dropped below τ* = 1.2247.</div>';
+    }
+    html += '<div style="padding:0 16px 12px;">';
+    html += '<div class="dim" style="font-size:10px;margin-bottom:4px;">τ TRAJECTORY</div>';
+    html += '<div style="display:flex;gap:4px;align-items:flex-end;height:32px;">';
+    var maxTau = Math.max.apply(null, s.tau_trajectory.concat([1.3]));
+    s.tau_trajectory.forEach(function(t) {
+      var h = Math.round((t / maxTau) * 32);
+      var c = t < 1.2247 ? 'var(--danger)' : 'var(--green)';
+      html += '<div style="width:8px;height:' + h + 'px;background:' + c + ';border-radius:2px;" title="τ=' + t + '"></div>';
+    });
+    html += '</div>';
+    html += '<div style="font-size:9px;color:var(--danger);margin-top:2px;">— τ* = 1.2247</div>';
+    html += '</div></div>';
+  });
+  html += '</div>';
+  body.innerHTML = html;
 }
 
 async function _loadCompare() {
