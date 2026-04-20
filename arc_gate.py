@@ -1167,7 +1167,7 @@ def observe(state, lp_content, request_time, pre_dist=None):
         _e = token_entropy(lp_content); state.last_entropy = _e
         state.hallucination_score = round(max(0.0, 1.0 - _e / state.warmup_entropy), 3)
     return {"status": state.last_status, "step": state.step,
-            "fr_z": round(fz, 3), "eu_z": round(ez, 3), "kl_dist": round(kl_dist, 6), "js_dist": round(js_dist, 6),
+            "fr_z": round(fz, 3), "tau_est": round(_tau_est, 4), "eu_z": round(ez, 3), "kl_dist": round(kl_dist, 6), "js_dist": round(js_dist, 6),
             "kl_window_mean": round(float(np.mean(state.window_kls)), 6) if state.window_kls else 0,
             "js_window_mean": round(float(np.mean(state.window_jss)), 6) if state.window_jss else 0,
             "meta_rate": round(_meta_rate, 6), "tau_est": round(_tau_est, 4), "lambda_est": round(_lambda_est, 4),
@@ -1347,7 +1347,7 @@ async def _stream_proxy(request, path, body_dict, fwd, did, version, hdrs, req_s
             with state._obs_lock:
                 pre_dist = response_to_dist(resp_text) if lp is None and resp_text else None
                 result = observe(state, lp, rt, pre_dist=pre_dist)
-            status = result.get("status", ""); step = result.get("step", 0); fz = result.get("fr_z", 0)
+            status = result.get("status", ""); step = result.get("step", 0); fz = result.get("fr_z", 0); _tau_est = result.get("tau_est", 1.2247)
             # Per-request status: combined FR-Z * log(prompt_length) score (Nine 2026)
             # Separates short ambiguous prompts (high FR-Z, short) from long attacks (high FR-Z, long)
             import math as _math
@@ -1759,7 +1759,7 @@ async def proxy(request: Request, path: str,
                 with state._obs_lock:
                     pre_dist = response_to_dist(response) if lp is None and response else None
                     result = observe(state, lp, rt, pre_dist=pre_dist)
-                status = result.get("status", ""); step = result.get("step", 0); fz = result.get("fr_z", 0)
+                status = result.get("status", ""); step = result.get("step", 0); fz = result.get("fr_z", 0); _tau_est = result.get("tau_est", 1.2247)
                 import math as _math2
                 _prompt_len2 = len(prompt) if prompt else 10
                 _combined2 = fz * _math2.log(max(_prompt_len2, 10)) / _math2.log(50)
