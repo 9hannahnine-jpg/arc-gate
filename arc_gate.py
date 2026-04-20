@@ -1386,12 +1386,14 @@ async def _stream_proxy(request, path, body_dict, fwd, did, version, hdrs, req_s
                 _cres_conf = 0.0
                 _cres_detected = _sess['crescendo_detected'] if _sess else False
                 _cres_turn = _sess['crescendo_turn'] if _sess else 0
-                if len(_scores) >= 2:
-                    _rising = sum(1 for i in range(1, len(_scores)) if _scores[i] > _scores[i-1])
-                    _cres_conf = _rising / (len(_scores) - 1)
-                    if _cres_conf > 0.7 and not _cres_detected and _combined > 2.0:
-                        _cres_detected = True
-                        _cres_turn = _turn
+                if len(_tau_traj) >= 2:
+                        TAU_STAR = 1.2247
+                        _below_tau = sum(1 for t in _tau_traj if t < TAU_STAR)
+                        _dropping = sum(1 for i in range(1, len(_tau_traj)) if _tau_traj[i] < _tau_traj[i-1])
+                        _cres_conf = (_below_tau + _dropping) / (2 * len(_tau_traj))
+                        if _cres_conf > 0.4 and not _cres_detected and _below_tau >= 2:
+                            _cres_detected = True
+                            _cres_turn = _turn
                 save_session(_sid, did, version, _turn, _tau_traj, _scores, _cres_conf, _cres_detected, _cres_turn)
             run_assertions(did, version, req_id, {"prompt": prompt, "response": resp_text,
                 "input_tokens": in_tok, "output_tokens": out_tok, "latency_ms": latency_ms,
@@ -1793,10 +1795,13 @@ async def proxy(request: Request, path: str,
                     _cres_conf2 = 0.0
                     _cres_detected2 = _sess2['crescendo_detected'] if _sess2 else False
                     _cres_turn2 = _sess2['crescendo_turn'] if _sess2 else 0
-                    if len(_scores2) >= 2:
-                        _rising2 = sum(1 for i in range(1, len(_scores2)) if _scores2[i] > _scores2[i-1])
-                        _cres_conf2 = _rising2 / (len(_scores2) - 1)
-                        if _cres_conf2 > 0.7 and not _cres_detected2 and _combined2 > 2.0:
+                    if len(_tau_traj2) >= 2:
+                        # Crescendo signal: tau dropping toward/below tau* = 1.2247
+                        TAU_STAR = 1.2247
+                        _below_tau = sum(1 for t in _tau_traj2 if t < TAU_STAR)
+                        _dropping = sum(1 for i in range(1, len(_tau_traj2)) if _tau_traj2[i] < _tau_traj2[i-1])
+                        _cres_conf2 = (_below_tau + _dropping) / (2 * len(_tau_traj2))
+                        if _cres_conf2 > 0.4 and not _cres_detected2 and _below_tau >= 2:
                             _cres_detected2 = True
                             _cres_turn2 = _turn2
                     print(f"[SESSION] Saving session {session_id} turn {_turn2} scores {_scores2}")
