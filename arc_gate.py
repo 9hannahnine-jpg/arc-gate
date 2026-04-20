@@ -1666,6 +1666,7 @@ async def proxy(request: Request, path: str,
     if did in {"demo", "demo-key", "test", "emo-key", "o"}: did = "arc-gate-demo"
     version = x_sentry_model_version or (body_dict.get("model", "default") if is_json else "default")
     session_id = request.headers.get("x-arc-session-id") or request.headers.get("X-Arc-Session-ID") or None
+    if session_id: print(f"[SESSION] Received session_id={session_id}")
     req_start = time.time()
 
     hdrs = {k: v for k, v in request.headers.items()
