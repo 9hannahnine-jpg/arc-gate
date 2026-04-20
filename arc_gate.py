@@ -530,6 +530,15 @@ def init_db():
         email TEXT UNIQUE, api_key TEXT UNIQUE,
         stripe_customer_id TEXT, stripe_subscription_id TEXT,
         status TEXT DEFAULT 'active', created_at REAL, cancelled_at REAL)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS sessions(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT, deployment_id TEXT, model_version TEXT,
+        turn_count INTEGER DEFAULT 0,
+        tau_trajectory TEXT, combined_scores TEXT,
+        crescendo_confidence REAL DEFAULT 0.0,
+        crescendo_detected INTEGER DEFAULT 0,
+        crescendo_turn INTEGER DEFAULT 0,
+        created_at REAL, updated_at REAL)""")
     conn.commit(); conn.close()
     print("[DB] Ready: " + DB_PATH)
 
