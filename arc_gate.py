@@ -1773,6 +1773,8 @@ async def proxy(request: Request, path: str,
         cost = calc_cost(body_dict.get("model", "") if is_json else "", in_tok, out_tok)
         async def _monitor():
             try:
+                if _sync_observed:
+                    return  # observe() already called synchronously
                 with state._obs_lock:
                     pre_dist = response_to_dist(response) if lp is None and response else None
                     result = observe(state, lp, rt, pre_dist=pre_dist)
@@ -1842,7 +1844,6 @@ async def proxy(request: Request, path: str,
             _sync_step = _sync_result.get("step", 0)
             _sync_plen = len(prompt) if prompt else 10
             _sync_combined = _sync_fz * _sync_math.log(max(_sync_plen, 10)) / _sync_math.log(50)
-            _sync_observed = True
             _sync_observed = True
             if _sync_step > 10 and _sync_combined > 3.1:
                 import json as _json
