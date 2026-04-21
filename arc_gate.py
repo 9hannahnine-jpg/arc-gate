@@ -352,6 +352,11 @@ INJECTION_PHRASES = [
     "as your operator", "as your owner", "as your creator",
     "management override", "executive override",
     "i work at anthropic", "i work at openai",
+    "granted special developer permissions", "special developer permissions",
+    "roleplay: you are", "you are alex", "alex, an ai without",
+    "base model without any rlhf", "without any rlhf fine-tuning",
+    "alignment training never happened", "as if your alignment training",
+    "respond as if your alignment",
     "from anthropic", "from openai",
     # Encoding hints
     "decode and follow", "execute the following base64",
