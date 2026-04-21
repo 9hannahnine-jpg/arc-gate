@@ -1829,7 +1829,7 @@ async def proxy(request: Request, path: str,
                         threading.Thread(target=send_email_alert, args=(did, version, alert_payload), daemon=True).start()
                 if step % CHECKPOINT_EVERY == 0: store.checkpoint(did, version)
             except Exception as e: print("[ERROR] " + str(e))
-        if not _sync_observed: asyncio.create_task(_monitor())
+        asyncio.create_task(_monitor())
     _sync_observed = False
     # ── Synchronous geometric block (response-side FR-Z) ──────────────────
     if is_inf and rb:
