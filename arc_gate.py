@@ -1830,6 +1830,37 @@ async def proxy(request: Request, path: str,
                 if step % CHECKPOINT_EVERY == 0: store.checkpoint(did, version)
             except Exception as e: print("[ERROR] " + str(e))
         asyncio.create_task(_monitor())
+    # ── Synchronous geometric block (response-side FR-Z) ──────────────────
+    if is_inf and rb:
+        try:
+            import math as _sync_math
+            with state._obs_lock:
+                _sync_pre = response_to_dist(response) if lp is None and response else None
+                _sync_result = observe(state, lp, rt, pre_dist=_sync_pre)
+            _sync_fz = _sync_result.get("fr_z", 0)
+            _sync_step = _sync_result.get("step", 0)
+            _sync_plen = len(prompt) if prompt else 10
+            _sync_combined = _sync_fz * _sync_math.log(max(_sync_plen, 10)) / _sync_math.log(50)
+            if _sync_step > 10 and _sync_combined > 3.1:
+                import json as _json
+                return JSONResponse(status_code=200, content={
+                    "id": rb.get("id", "blocked"),
+                    "object": "chat.completion",
+                    "choices": [{"index": 0, "message": {
+                        "role": "assistant",
+                        "content": "[BLOCKED by Arc Gate — geometric drift detected]"
+                    }, "finish_reason": "stop"}],
+                    "model": rb.get("model", "unknown"),
+                    "arc_sentry": {
+                        "blocked": True,
+                        "layer": "geometric",
+                        "reason": f"geometric:combined={round(_sync_combined,3)}",
+                        "fr_z": round(_sync_fz, 3),
+                        "combined_score": round(_sync_combined, 3)
+                    }
+                })
+        except Exception as e:
+            print(f"[GEO_SYNC] error: {e}")
     # Inject arc_sentry metadata into JSON responses
     try:
         rb2 = up.json()
