@@ -1829,7 +1829,8 @@ async def proxy(request: Request, path: str,
                         threading.Thread(target=send_email_alert, args=(did, version, alert_payload), daemon=True).start()
                 if step % CHECKPOINT_EVERY == 0: store.checkpoint(did, version)
             except Exception as e: print("[ERROR] " + str(e))
-        asyncio.create_task(_monitor())
+        if not _sync_observed: asyncio.create_task(_monitor())
+    _sync_observed = False
     # ── Synchronous geometric block (response-side FR-Z) ──────────────────
     if is_inf and rb:
         try:
@@ -1841,6 +1842,8 @@ async def proxy(request: Request, path: str,
             _sync_step = _sync_result.get("step", 0)
             _sync_plen = len(prompt) if prompt else 10
             _sync_combined = _sync_fz * _sync_math.log(max(_sync_plen, 10)) / _sync_math.log(50)
+            _sync_observed = True
+            _sync_observed = True
             if _sync_step > 10 and _sync_combined > 3.1:
                 import json as _json
                 return JSONResponse(status_code=200, content={
