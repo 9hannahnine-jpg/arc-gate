@@ -4,3 +4,5 @@ httpx
 numpy
 torch
 sentence-transformers
+
+arc-sentry>=3.2.3

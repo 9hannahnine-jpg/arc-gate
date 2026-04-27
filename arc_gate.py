@@ -39,6 +39,15 @@ ALERT_SMTP_USER     = os.environ.get("GATE_SMTP_USER", "")
 ALERT_SMTP_PASS     = os.environ.get("GATE_SMTP_PASS", "")
 EMBED_MODEL_NAME    = os.environ.get("GATE_EMBED_MODEL", "all-MiniLM-L6-v2")
 
+# ── Behavioral pre-filter (Arc Sentry) ───────────────────
+try:
+    from arc_sentry.behavioral_filter import BehavioralFilter as _BF
+    _behavioral_filter = _BF()
+    print("[BF] BehavioralFilter loaded (AUROC 0.913 OOD)")
+except Exception as _e:
+    _behavioral_filter = None
+    print(f"[BF] BehavioralFilter unavailable: {_e}")
+
 # ── Customer / billing config ─────────────────────────────────
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 BILLING_SMTP_USER     = os.environ.get("BILLING_SMTP_USER", "9hannahnine@gmail.com")
@@ -1739,6 +1748,16 @@ async def proxy(request: Request, path: str,
                 "model":body_dict.get("model","unknown"),
                 "arc_sentry":{"blocked":True,"reason":f"phrase:{matched}","layer":"phrase"}
             })
+        # Layer 0: behavioral pre-filter
+        if _behavioral_filter is not None:
+            _bf_result = _behavioral_filter.screen(prompt_text)
+            if _bf_result.blocked:
+                return JSONResponse(status_code=200, content={
+                    "id":"blocked","object":"chat.completion",
+                    "choices":[{"index":0,"message":{"role":"assistant","content":"[BLOCKED by Arc Gate — behavioral direction]"},"finish_reason":"stop"}],
+                    "model":body_dict.get("model","unknown"),
+                    "arc_sentry":{"blocked":True,"reason":f"behavioral:{_bf_result.score:.4f}","layer":"behavioral_prefilter","score":_bf_result.score}
+                })
         geo_blocked, fr_z, fr_dist = geo_check_prompt(prompt_text, session_key=_incoming_token)
         if geo_blocked:
             return JSONResponse(status_code=200, content={
