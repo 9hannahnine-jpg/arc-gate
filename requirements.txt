@@ -5,4 +5,4 @@ numpy
 torch
 sentence-transformers
 
-git+https://github.com/9hannahnine-jpg/arc-sentry.git
+git+https://github.com/9hannahnine-jpg/arc-sentry.git  # bust:1777332776
