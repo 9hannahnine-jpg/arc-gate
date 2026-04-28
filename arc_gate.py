@@ -83,7 +83,7 @@ _DT_CONSEC_BLOCK  = int(os.environ.get("DT_CONSEC",  "2"))
 # (Nine 2026a,b,c: D(t) < 0 when tau < tau* — attacks are off-manifold)
 
 _GEO_CENTROID    = None   # mean embedding of clean prompts
-_GEO_THRESHOLD   = float(os.environ.get("GEO_THRESH", "1.42"))
+_GEO_THRESHOLD   = float(os.environ.get("GEO_THRESH", "1.55"))
 _GEO_LOCK        = Lock()
 _GEO_READY       = False
 
