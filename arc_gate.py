@@ -1376,7 +1376,7 @@ async def _stream_proxy(request, path, body_dict, fwd, did, version, hdrs, req_s
             _combined = fz * _math.log(max(_prompt_len, 10)) / _math.log(50)
             if step <= 10:
                 req_status = "warmup"
-            elif _combined > 4.0:
+            elif _combined > 4.5:
                 req_status = "drift"
             elif _combined > 2.0:
                 req_status = "elevated"
@@ -1801,7 +1801,7 @@ async def proxy(request: Request, path: str,
                 _combined2 = fz * _math2.log(max(_prompt_len2, 10)) / _math2.log(50)
                 if step <= 10:
                     req_status2 = "warmup"
-                elif _combined2 > 4.0:
+                elif _combined2 > 4.5:
                     req_status2 = "drift"
                 elif _combined2 > 2.0:
                     req_status2 = "elevated"
@@ -1862,7 +1862,7 @@ async def proxy(request: Request, path: str,
             _sync_plen = len(prompt) if prompt else 10
             _sync_combined = _sync_fz * _sync_math.log(max(_sync_plen, 10)) / _sync_math.log(50)
             _sync_observed = True
-            if _sync_step > 10 and _sync_combined > 4.0:
+            if _sync_step > 10 and _sync_combined > 4.5:
                 import json as _json
                 return JSONResponse(status_code=200, content={
                     "id": rb.get("id", "blocked"),
