@@ -1862,6 +1862,19 @@ async def proxy(request: Request, path: str,
             _sync_plen = len(prompt) if prompt else 10
             _sync_combined = _sync_fz * _sync_math.log(max(_sync_plen, 10)) / _sync_math.log(50)
             _sync_observed = True
+            # Save trace from sync block since _monitor() will skip if _sync_observed
+            import math as _sync_math2
+            _sync_plen2 = len(prompt) if prompt else 10
+            _sync_combined2 = _sync_fz * _sync_math.log(max(_sync_plen2, 10)) / _sync_math.log(50)
+            if _sync_step <= 10:
+                _sync_req_status = "warmup"
+            elif _sync_combined > 4.5:
+                _sync_req_status = "drift"
+            elif _sync_combined > 3.0:
+                _sync_req_status = "elevated"
+            else:
+                _sync_req_status = "stable"
+            save_trace(did, version, req_id, prompt, response, in_tok, out_tok, latency_ms, cost, _sync_req_status, _sync_fz, rt)
             if _sync_step > 10 and _sync_combined > 4.5:
                 import json as _json
                 return JSONResponse(status_code=200, content={
