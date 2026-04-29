@@ -1461,6 +1461,11 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True,
 @app.get("/")
 async def root(): return RedirectResponse(url="/dashboard")
 
+@app.get("/try")
+async def try_page():
+    from fastapi.responses import FileResponse
+    return FileResponse("try.html")
+
 @app.get("/dashboard")
 async def dashboard():
     try:
