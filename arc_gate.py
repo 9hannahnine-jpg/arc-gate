@@ -1874,7 +1874,9 @@ async def proxy(request: Request, path: str,
                 _sync_req_status = "elevated"
             else:
                 _sync_req_status = "stable"
-            save_trace(did, version, req_id, prompt, response, in_tok, out_tok, latency_ms, cost, _sync_req_status, _sync_fz, rt)
+            try:
+                save_trace(did, version, req_id, prompt, response, in_tok, out_tok, latency_ms, cost, _sync_req_status, _sync_fz, rt)
+            except Exception as _te: print(f"[TRACE] {_te}")
             if _sync_step > 10 and _sync_combined > 4.5:
                 import json as _json
                 return JSONResponse(status_code=200, content={
