@@ -1685,7 +1685,7 @@ async def proxy(request: Request, path: str,
         except: pass
     is_inf  = _is_inference(path)
     auth_h  = request.headers.get("authorization", "")
-    did     = x_sentry_deployment or (auth_h[-8:] if auth_h else None) or "default"
+    did     = x_sentry_deployment or "arc-gate-demo"
     if did in {"demo", "demo-key", "test", "emo-key", "o"}: did = "arc-gate-demo"
     version = x_sentry_model_version or (body_dict.get("model", "default") if is_json else "default")
     session_id = request.headers.get("x-arc-session-id") or request.headers.get("X-Arc-Session-ID") or None
@@ -1874,9 +1874,7 @@ async def proxy(request: Request, path: str,
                 _sync_req_status = "elevated"
             else:
                 _sync_req_status = "stable"
-            try:
-                save_trace(did, version, req_id, prompt, response, in_tok, out_tok, latency_ms, cost, _sync_req_status, _sync_fz, rt)
-            except Exception as _te: print(f"[TRACE] {_te}")
+            save_trace(did, version, req_id, prompt, response, in_tok, out_tok, latency_ms, cost, _sync_req_status, _sync_fz, rt)
             if _sync_step > 10 and _sync_combined > 4.5:
                 import json as _json
                 return JSONResponse(status_code=200, content={
