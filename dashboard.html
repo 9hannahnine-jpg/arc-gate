@@ -235,9 +235,9 @@ function showApp() {
     document.getElementById('user-email').textContent = _userEmail;
     document.getElementById('user-pill').style.display = 'flex';
   }
+  showLiveDemo();
   loadHealth();
   loadDeployments();
-  showLiveDemo();
 }
 
 async function validateKey(key) {
