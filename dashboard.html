@@ -274,7 +274,7 @@ async function apiFetch(path) {
   try { return await (await fetch(API + path, {headers: hdrs})).json(); } catch(e) { return null; }
 }
 
-async function loadHealth() {
+async async function loadHealth() {
   var d = await apiFetch('/sentry/health');
   if (d && d.upstream) document.getElementById('hdr-upstream').textContent = d.upstream;
 }
