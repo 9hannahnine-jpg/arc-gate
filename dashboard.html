@@ -207,7 +207,7 @@ var EXAMPLES = [
 
 function updateTime() {
   var el = document.getElementById('hdr-time');
-  if (el) var s=new Date().toISOString();el.textContent=s.slice(0,10)+' '+s.slice(11,19)+' UTC';
+  if (el) { var s=new Date().toISOString();el.textContent=s.slice(0,10)+' '+s.slice(11,19)+' UTC'; }
 }
 setInterval(updateTime, 1000);
 updateTime();
