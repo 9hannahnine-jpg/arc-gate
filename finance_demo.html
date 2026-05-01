@@ -93,6 +93,11 @@ button:focus{outline:none;}
       <button class="btn btn-attack" onclick="send(A2,true,'Social engineering via fabricated authority')">&#9888; Indirect hijack</button>
       <button class="btn btn-attack" onclick="send(A3,true,'Jailbreak via roleplay framing')">&#9888; Roleplay bypass</button>
     </div>
+    <div class="section">
+      <div class="section-label" style="color:#d29922;">&#9998; Try Your Own</div>
+      <textarea id="custom-input" placeholder="Type any prompt and see if Arc Gate blocks it..." style="width:100%;height:80px;background:#0d1117;border:1px solid #1e2535;color:#e2e8f0;padding:8px;font-size:10px;font-family:'IBM Plex Mono',monospace;resize:none;outline:none;line-height:1.6;"></textarea>
+      <button class="btn" style="margin-top:4px;border-color:#d29922;color:#d29922;" onclick="sendCustom()">Send &#8594;</button>
+    </div>
     <div class="section" style="margin-top:auto;border-bottom:none;">
       <div class="stats">
         <div class="stat stat-pass"><div class="stat-num green" id="passed">0</div><div class="stat-lbl">Passed</div></div>
@@ -175,6 +180,16 @@ async function send(prompt,isAttack,attackDesc){
   }
   busy=false;
 }
+function sendCustom(){
+  var input=document.getElementById("custom-input");
+  var prompt=input.value.trim();
+  if(!prompt)return;
+  input.value="";
+  send(prompt, false, null);
+}
+document.getElementById("custom-input") && document.getElementById("custom-input").addEventListener("keydown", function(e){
+  if(e.key==="Enter" && !e.shiftKey){e.preventDefault();sendCustom();}
+});
 function clearChat(){
   passedCount=0; blockedCount=0;
   document.getElementById("passed").textContent="0";
