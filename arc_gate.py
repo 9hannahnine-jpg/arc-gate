@@ -1912,3 +1912,8 @@ async def proxy(request: Request, path: str,
         pass
     return Response(content=up.content, status_code=up.status_code,
                     headers=dict(up.headers), media_type=up.headers.get("content-type"))
+
+@app.get("/finance-demo")
+async def finance_demo():
+    with open("finance_demo.html") as f:
+        return HTMLResponse(f.read())
