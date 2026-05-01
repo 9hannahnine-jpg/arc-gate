@@ -1680,6 +1680,11 @@ async def list_customers(auth=Depends(auth)):
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+@app.get("/finance-demo")
+async def finance_demo():
+    with open("finance_demo.html") as f:
+        return HTMLResponse(f.read())
+
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"])
 async def proxy(request: Request, path: str,
                 x_sentry_deployment: Optional[str] = Header(default=None),
@@ -1913,8 +1918,3 @@ async def proxy(request: Request, path: str,
         pass
     return Response(content=up.content, status_code=up.status_code,
                     headers=dict(up.headers), media_type=up.headers.get("content-type"))
-
-@app.get("/finance-demo")
-async def finance_demo():
-    with open("finance_demo.html") as f:
-        return HTMLResponse(f.read())
