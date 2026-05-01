@@ -48,6 +48,57 @@ except Exception as _e:
     _behavioral_filter = None
     print(f"[BF] BehavioralFilter unavailable: {_e}")
 
+# ── Mahalanobis geometric filter ─────────────────────────
+_MAHAL_CLEAN_PROMPTS = [
+    "What is my current account balance?",
+    "Give me a summary of my holdings.",
+    "What is NVIDIA trading at right now?",
+    "Show me my NVDA position.",
+    "What was my return last quarter?",
+    "What is my portfolio allocation?",
+    "How much cash do I have available?",
+    "What are my top performing assets?",
+    "Show me my transaction history.",
+    "What is the current price of Bitcoin?",
+    "How is the market performing today?",
+    "What is my unrealized gain on MSFT?",
+    "Can I buy more shares of NVDA?",
+    "What is my total portfolio value?",
+    "Show me my dividend income.",
+    "What sectors am I most exposed to?",
+    "How diversified is my portfolio?",
+    "What is my cost basis for BTC?",
+    "What is the 52 week high for NVDA?",
+    "How much did I invest last month?",
+    "What are my pending transactions?",
+    "Is my account verified?",
+    "What are the trading hours?",
+    "Can I set a price alert for MSFT?",
+    "What is the current S&P 500 level?",
+    "Show me my portfolio performance this year.",
+    "What is my risk score?",
+    "How much margin do I have available?",
+    "What ETFs do you recommend for diversification?",
+    "What are your business hours?",
+    "How do I reset my password?",
+    "What payment methods do you accept?",
+    "Can I get a refund?",
+    "How do I contact support?",
+    "What is your refund policy?",
+    "How do I cancel my subscription?",
+    "Can I upgrade my plan?",
+    "What is the difference between the free and pro plan?",
+    "How do I generate an API key?",
+    "What is rate limiting?",
+]
+try:
+    from arc_sentry.behavioral_filter import MahalanobisFilter as _MF
+    _mahal_filter = _MF(clean_prompts=_MAHAL_CLEAN_PROMPTS, threshold=20.0)
+    print("[MF] MahalanobisFilter loaded (threshold=20.0)")
+except Exception as _e:
+    _mahal_filter = None
+    print(f"[MF] MahalanobisFilter unavailable: {_e}")
+
 # ── Customer / billing config ─────────────────────────────────
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 BILLING_SMTP_USER     = os.environ.get("BILLING_SMTP_USER", "9hannahnine@gmail.com")
@@ -1765,6 +1816,16 @@ async def proxy(request: Request, path: str,
                     "choices":[{"index":0,"message":{"role":"assistant","content":"[BLOCKED by Arc Gate — behavioral direction]"},"finish_reason":"stop"}],
                     "model":body_dict.get("model","unknown"),
                     "arc_sentry":{"blocked":True,"reason":f"behavioral:{_bf_result.score:.4f}","layer":"behavioral_prefilter","score":_bf_result.score}
+                })
+        # Layer 0.5: Mahalanobis geometric filter
+        if _mahal_filter is not None:
+            _mf_result = _mahal_filter.screen(prompt_text)
+            if _mf_result.blocked:
+                return JSONResponse(status_code=200, content={
+                    "id":"blocked","object":"chat.completion",
+                    "choices":[{"index":0,"message":{"role":"assistant","content":"[BLOCKED by Arc Gate — geometric anomaly]"},"finish_reason":"stop"}],
+                    "model": body_dict.get("model","unknown"),
+                    "arc_sentry":{"blocked":True,"reason":f"mahalanobis:{_mf_result.score:.2f}","layer":"mahalanobis","score":_mf_result.score}
                 })
         geo_blocked, fr_z, fr_dist = geo_check_prompt(prompt_text, session_key=_incoming_token)
         if geo_blocked:
