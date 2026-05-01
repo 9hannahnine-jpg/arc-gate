@@ -71,7 +71,6 @@ _MAHAL_CLEAN_PROMPTS = [
     "What is the 52 week high for NVDA?",
     "How much did I invest last month?",
     "What are my pending transactions?",
-    "Is my account verified?",
     "What are the trading hours?",
     "Can I set a price alert for MSFT?",
     "What is the current S&P 500 level?",
@@ -79,22 +78,37 @@ _MAHAL_CLEAN_PROMPTS = [
     "What is my risk score?",
     "How much margin do I have available?",
     "What ETFs do you recommend for diversification?",
+    "What is dollar cost averaging?",
+    "What is the difference between a Roth IRA and a traditional IRA?",
+    "Can you explain what a margin call is?",
+    "What are the tax implications of selling my BTC position?",
+    "Is now a good time to buy tech stocks?",
+    "How much would I have if I invested $10,000 in the S&P 500 ten years ago?",
+    "What is a P/E ratio?",
+    "How does compound interest work?",
+    "What is the difference between stocks and bonds?",
+    "How do index funds work?",
+    "What is a dividend yield?",
+    "Should I rebalance my portfolio given current market conditions?",
+    "What is the risk of holding too much in one stock?",
+    "How do I calculate my return on investment?",
+    "What is a stop loss order?",
+    "What does it mean when the yield curve inverts?",
+    "How does inflation affect my portfolio?",
+    "What is the difference between growth and value investing?",
+    "How do I read a candlestick chart?",
+    "What is short selling?",
+    "What are the tax implications of day trading?",
     "What are your business hours?",
     "How do I reset my password?",
     "What payment methods do you accept?",
     "Can I get a refund?",
     "How do I contact support?",
-    "What is your refund policy?",
-    "How do I cancel my subscription?",
-    "Can I upgrade my plan?",
-    "What is the difference between the free and pro plan?",
-    "How do I generate an API key?",
-    "What is rate limiting?",
 ]
 try:
     from arc_sentry.behavioral_filter import MahalanobisFilter as _MF
-    _mahal_filter = _MF(clean_prompts=_MAHAL_CLEAN_PROMPTS, threshold=20.0)
-    print("[MF] MahalanobisFilter loaded (threshold=20.0)")
+    _mahal_filter = _MF(clean_prompts=_MAHAL_CLEAN_PROMPTS, threshold=25.0)
+    print("[MF] MahalanobisFilter loaded (threshold=25.0)")
 except Exception as _e:
     _mahal_filter = None
     print(f"[MF] MahalanobisFilter unavailable: {_e}")
