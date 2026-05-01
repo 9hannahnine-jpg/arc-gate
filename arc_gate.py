@@ -1772,6 +1772,7 @@ async def proxy(request: Request, path: str,
 
         fwd = body_bytes
     if is_inf and is_json and body_dict: fwd = json.dumps(_inject_logprobs(body_dict)).encode()
+    if 'fwd' not in dir(): fwd = body_bytes
     if is_inf and is_json: hdrs["content-length"] = str(len(fwd))
     try:
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
