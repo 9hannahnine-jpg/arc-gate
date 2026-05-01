@@ -104,6 +104,11 @@ _MAHAL_CLEAN_PROMPTS = [
     "What payment methods do you accept?",
     "Can I get a refund?",
     "How do I contact support?",
+    "What percentage of my portfolio is in equities?",
+    "What percentage of my holdings are in tech stocks?",
+    "What is my equity to bond ratio?",
+    "How much of my portfolio is in crypto?",
+    "What is my cash position as a percentage of total assets?",
 ]
 try:
     from arc_sentry.behavioral_filter import MahalanobisFilter as _MF
