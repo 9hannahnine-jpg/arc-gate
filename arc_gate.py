@@ -602,7 +602,10 @@ def init_db():
         prompt TEXT, response TEXT,
         input_tokens INTEGER, output_tokens INTEGER,
         latency_ms REAL, cost_usd REAL,
-        drift_status TEXT, fr_z REAL, timestamp REAL)""")
+        drift_status TEXT, fr_z REAL, mahal_score REAL, timestamp REAL)""")
+    try:
+        conn.execute("ALTER TABLE traces ADD COLUMN mahal_score REAL DEFAULT 0.0")
+    except: pass
     conn.execute("""CREATE TABLE IF NOT EXISTS eval_results(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         deployment_id TEXT, model_version TEXT, request_id TEXT,
@@ -782,10 +785,10 @@ def save_regression_comparison(did, v_from, v_to, result):
         conn.commit(); conn.close()
     except Exception as e: print("[DB] save_regression: " + str(e))
 
-def save_trace(did, version, req_id, prompt, response, in_tok, out_tok, latency_ms, cost, status, fr_z, ts):
+def save_trace(did, version, req_id, prompt, response, in_tok, out_tok, latency_ms, cost, status, fr_z, ts, mahal_score=0.0):
     try:
         conn = sqlite3.connect(DB_PATH)
-        conn.execute("INSERT INTO traces(deployment_id,model_version,request_id,prompt,response,input_tokens,output_tokens,latency_ms,cost_usd,drift_status,fr_z,timestamp) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+        conn.execute("INSERT INTO traces(deployment_id,model_version,request_id,prompt,response,input_tokens,output_tokens,latency_ms,cost_usd,drift_status,fr_z,mahal_score,timestamp) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (did, version, req_id, prompt[:500], response[:500], in_tok, out_tok, latency_ms, cost, status, fr_z, ts))
         conn.commit(); conn.close()
     except Exception as e: print("[DB] save_trace: " + str(e))
@@ -1750,6 +1753,37 @@ async def list_customers(auth=Depends(auth)):
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+@app.get("/sentry/deployments/{deployment_id}/input-drift")
+async def input_drift(deployment_id: str, limit: int = 100, auth=Depends(auth)):
+    """Rolling Mahalanobis score history for input-space stability monitoring."""
+    with sqlite3.connect(DB_PATH) as conn:
+        rows = conn.execute(
+            "SELECT timestamp, mahal_score, drift_status, prompt FROM traces WHERE deployment_id=? ORDER BY timestamp DESC LIMIT ?",
+            (deployment_id, limit)
+        ).fetchall()
+    scores = [{"timestamp": r[0], "mahal_score": r[1] or 0.0, "drift_status": r[2], "prompt_preview": (r[3] or "")[:60]} for r in rows]
+    if scores:
+        vals = [s["mahal_score"] for s in scores]
+        import numpy as np
+        mean = float(np.mean(vals))
+        trend = float(np.mean(vals[:10])) - float(np.mean(vals[-10:])) if len(vals) >= 20 else 0.0
+        alert = mean > 15.0
+    else:
+        mean = 0.0
+        trend = 0.0
+        alert = False
+    return {
+        "deployment_id": deployment_id,
+        "input_drift": {
+            "scores": scores,
+            "mean_mahal": round(mean, 3),
+            "trend": round(trend, 3),
+            "alert": alert,
+            "threshold": 25.0,
+            "interpretation": "INPUT DRIFT DETECTED — agent may be under attack" if alert else "Input space stable"
+        }
+    }
+
 @app.get("/finance-demo")
 async def finance_demo():
     with open("finance_demo.html") as f:
@@ -1826,6 +1860,13 @@ async def proxy(request: Request, path: str,
                 "model":body_dict.get("model","unknown"),
                 "arc_sentry":{"blocked":True,"reason":f"phrase:{matched}","layer":"phrase"}
             })
+        # Compute mahal score for logging (always, even if not blocked)
+        _mahal_score = 0.0
+        if _mahal_filter is not None:
+            try:
+                _mahal_score = _mahal_filter.score(prompt_text)
+            except Exception as _me:
+                print(f"[MF] score error: {_me}")
         # Layer 0: behavioral pre-filter
         if _behavioral_filter is not None:
             _bf_result = _behavioral_filter.screen(prompt_text)
