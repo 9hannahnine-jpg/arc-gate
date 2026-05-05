@@ -147,8 +147,8 @@ _MAHAL_CLEAN_PROMPTS = [
 ]
 try:
     from arc_sentry.behavioral_filter import MahalanobisFilter as _MF
-    _mahal_filter = _MF(clean_prompts=_MAHAL_CLEAN_PROMPTS, threshold=25.0)
-    print("[MF] MahalanobisFilter loaded (threshold=25.0)")
+    _mahal_filter = _MF(clean_prompts=_MAHAL_CLEAN_PROMPTS, threshold=35.0)
+    print("[MF] MahalanobisFilter loaded (threshold=35.0)")
 except Exception as _e:
     _mahal_filter = None
     print(f"[MF] MahalanobisFilter unavailable: {_e}")
