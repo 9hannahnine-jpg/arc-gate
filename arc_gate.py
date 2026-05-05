@@ -1879,16 +1879,16 @@ async def proxy(request: Request, path: str,
                     "model":body_dict.get("model","unknown"),
                     "arc_sentry":{"blocked":True,"reason":f"behavioral:{_bf_result.score:.4f}","layer":"behavioral_prefilter","score":_bf_result.score}
                 })
-        # Layer 0.5: Mahalanobis geometric filter
+        # Layer 0.5: Mahalanobis geometric filter — LOG ONLY, not blocking
+        # Disabled as blocking layer until domain-specific centroid is calibrated
+        _mahal_score_log = 0.0
         if _mahal_filter is not None:
-            _mf_result = _mahal_filter.screen(prompt_text)
-            if _mf_result.blocked:
-                return JSONResponse(status_code=200, content={
-                    "id":"blocked","object":"chat.completion",
-                    "choices":[{"index":0,"message":{"role":"assistant","content":"[BLOCKED by Arc Gate — geometric anomaly]"},"finish_reason":"stop"}],
-                    "model": body_dict.get("model","unknown"),
-                    "arc_sentry":{"blocked":True,"reason":f"mahalanobis:{_mf_result.score:.2f}","layer":"mahalanobis","score":_mf_result.score}
-                })
+            try:
+                _mahal_score_log = _mahal_filter.score(prompt_text)
+                if _mahal_score_log > 35.0:
+                    print(f"[MAHAL] High score {_mahal_score_log:.2f} for prompt: {prompt_text[:60]}")
+            except Exception as _me:
+                print(f"[MAHAL] score error: {_me}")
         geo_blocked, fr_z, fr_dist = geo_check_prompt(prompt_text, session_key=_incoming_token)
         if geo_blocked:
             return JSONResponse(status_code=200, content={
