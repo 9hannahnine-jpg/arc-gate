@@ -695,8 +695,23 @@ function demoSend() {
   }).then(function(res) { return res.json(); }).then(function(d) {
     if (d.arc_sentry && d.arc_sentry.blocked) {
       r.className = 'msg-blocked';
-      var layer = d.arc_sentry.layer === 'geometric' ? 'Fisher-Rao geometric' : 'phrase match';
-      r.innerHTML = 'BLOCKED <span class="msg-blocked-layer">' + layer + '</span>';
+      var as = d.arc_sentry;
+      var sevColor = {critical:'#ff4444',high:'#ff8800',medium:'#ffcc00',low:'#88cc88',none:'#888'}[as.severity||'none']||'#888';
+      var layerLabel = {'phrase':'Phrase Filter','behavioral_prefilter':'Behavioral Classifier','llm_judge':'LLM Judge','residual_probe':'Residual Probe','geometric':'Geometric Detector','geometric_drift':'Session Drift'}[as.layer]||as.layer||'Unknown';
+      var tHtml = '';
+      if (as.triggered_layers && as.triggered_layers.length) {
+        tHtml = '<div style="margin-top:5px;font-size:9px;color:#aaa;">';
+        as.triggered_layers.forEach(function(tl){tHtml+='<span style="margin-right:8px;">▸ '+tl.layer+' ('+((tl.score||0).toFixed(2))+')</span>';});
+        tHtml += '</div>';
+      }
+      var jHtml = as.judge_reasoning ? '<div style="margin-top:4px;font-size:9px;color:#ffaa88;font-style:italic;">'+as.judge_reasoning+'</div>' : '';
+      var rwHtml = as.suggested_rewrite ? '<div style="margin-top:4px;font-size:9px;color:#88aaff;">💡 '+as.suggested_rewrite+'</div>' : '';
+      r.innerHTML = '<div style="display:flex;align-items:center;gap:8px;">'
+        +'<span style="color:#ff6b6b;font-weight:700;font-size:11px;">BLOCKED</span>'
+        +'<span style="background:rgba(255,107,107,0.15);border:1px solid rgba(255,107,107,0.3);border-radius:3px;padding:1px 6px;font-size:9px;color:#ff8080;">'+layerLabel+'</span>'
+        +'<span style="background:rgba(255,255,255,0.05);border-radius:3px;padding:1px 6px;font-size:9px;color:'+sevColor+';">'+(as.severity||'unknown').toUpperCase()+'</span>'
+        +'<span style="font-size:9px;color:#666;margin-left:auto;">'+((as.confidence||0)*100).toFixed(0)+'% confidence</span>'
+        +'</div>'+tHtml+jHtml+rwHtml;
     } else if (d.choices && d.choices[0]) {
       r.className = 'msg-ok';
       r.innerHTML = '<span class="msg-ok-icon">ok</span><span>' + (d.choices[0].message.content||'').replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>';
