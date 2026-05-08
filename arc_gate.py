@@ -2177,8 +2177,13 @@ async def proxy(request: Request, path: str,
                             suggested_rewrite="Rephrase your request to avoid instruction override language."
                         )
                         })
-                    # Judge said BENIGN or AMBIGUOUS — allow through
-                    print(f"[JUDGE] Overrode block: {_judge_result['verdict']} — {prompt_text[:60]}")
+                    # Judge said BENIGN — allow through
+                    if _judge_result["verdict"] == "BENIGN":
+                        print(f"[JUDGE] Overrode block: BENIGN — {prompt_text[:60]}")
+                    else:
+                        # AMBIGUOUS — restricted_continue: forward but flag
+                        print(f"[JUDGE] Restricted continue: AMBIGUOUS — {prompt_text[:60]}")
+                        _RESTRICTED_CONTINUE = True
         # Layer 0.5: Mahalanobis geometric filter — LOG ONLY, not blocking
         # Disabled as blocking layer until domain-specific centroid is calibrated
         _mahal_score_log = 0.0
@@ -2341,10 +2346,30 @@ async def proxy(request: Request, path: str,
     try:
         rb2 = up.json()
         if isinstance(rb2, dict):
-            rb2['arc_sentry'] = _arc_sentry_response(
-                blocked=False, decision="allowed", layer="none",
-                reason="passed_all_layers", severity="none", confidence=0.0
-            )
+            if _RESTRICTED_CONTINUE:
+                rb2['arc_sentry'] = _arc_sentry_response(
+                    blocked=False, decision="restricted_continue", layer="llm_judge",
+                    reason="ambiguous_monitored", severity="low", confidence=0.5,
+                    triggered_layers=[{"layer":"llm_judge","signal":"ambiguous","score":0.5}],
+                    judge_reasoning="Request flagged as ambiguous. Continuing in monitored mode."
+                )
+                # Prepend warning to response content
+                try:
+                    for choice in rb2.get("choices", []):
+                        if choice.get("message", {}).get("content"):
+                            choice["message"]["content"] = (
+                                "[Arc Gate: Monitored Response — potential policy concern detected]
+
+"
+                                + choice["message"]["content"]
+                            )
+                except Exception:
+                    pass
+            else:
+                rb2['arc_sentry'] = _arc_sentry_response(
+                    blocked=False, decision="allowed", layer="none",
+                    reason="passed_all_layers", severity="none", confidence=0.0
+                )
             import json as _json
             return Response(content=_json.dumps(rb2), status_code=up.status_code,
                           media_type='application/json')
