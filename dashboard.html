@@ -712,6 +712,11 @@ function demoSend() {
         +'<span style="background:rgba(255,255,255,0.05);border-radius:3px;padding:1px 6px;font-size:9px;color:'+sevColor+';">'+(as.severity||'unknown').toUpperCase()+'</span>'
         +'<span style="font-size:9px;color:#666;margin-left:auto;">'+((as.confidence||0)*100).toFixed(0)+'% confidence</span>'
         +'</div>'+tHtml+jHtml+rwHtml;
+    } else if (d.arc_sentry && d.arc_sentry.decision === 'restricted_continue') {
+      r.className = 'msg-ok';
+      var warnDiv = '<div style="background:rgba(255,170,0,0.08);border:1px solid rgba(255,170,0,0.3);border-radius:4px;padding:5px 10px;margin-bottom:6px;font-size:9px;color:#ffaa44;letter-spacing:0.04em;">⚠ MONITORED — Arc Gate flagged this request but allowed continuation</div>';
+      var content = (d.choices&&d.choices[0]?d.choices[0].message.content||'':'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+      r.innerHTML = warnDiv + '<span>' + content + '</span>';
     } else if (d.choices && d.choices[0]) {
       r.className = 'msg-ok';
       r.innerHTML = '<span class="msg-ok-icon">ok</span><span>' + (d.choices[0].message.content||'').replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>';
