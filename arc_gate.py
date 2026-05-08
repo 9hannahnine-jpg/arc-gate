@@ -56,6 +56,50 @@ _residual_pca          = None
 _PROBE_THRESHOLD       = float(os.environ.get("PROBE_THRESHOLD", "0.65"))
 _PROBE_ENABLED         = os.environ.get("PROBE_ENABLED", "true").lower() == "true"
 
+# ── Policy Modes ─────────────────────────────────────────────
+# Set ARC_POLICY_MODE env var: strict | balanced | research | developer
+_POLICY_MODE = os.environ.get("ARC_POLICY_MODE", "balanced").lower()
+
+_POLICY_CONFIGS = {
+    "strict": {
+        "svm_block_threshold":   0.50,   # block at lower SVM score
+        "svm_judge_threshold":   0.15,   # route to judge sooner
+        "phrase_enabled":        True,
+        "geo_enabled":           True,
+        "probe_threshold":       0.55,
+        "description":           "Maximum protection. Higher false positive rate. For high-risk deployments."
+    },
+    "balanced": {
+        "svm_block_threshold":   0.70,   # default
+        "svm_judge_threshold":   0.25,   # default
+        "phrase_enabled":        True,
+        "geo_enabled":           True,
+        "probe_threshold":       0.65,
+        "description":           "Balanced protection and usability. Recommended for most deployments."
+    },
+    "research": {
+        "svm_block_threshold":   0.85,   # only block high-confidence attacks
+        "svm_judge_threshold":   0.50,   # route most things to judge
+        "phrase_enabled":        False,  # disable phrase layer — too aggressive for research
+        "geo_enabled":           False,  # disable geometric layer
+        "probe_threshold":       0.80,
+        "description":           "Reduced blocking for security research and red-teaming workflows."
+    },
+    "developer": {
+        "svm_block_threshold":   0.90,   # only block obvious attacks
+        "svm_judge_threshold":   0.70,
+        "phrase_enabled":        False,  # disable phrase layer for developers
+        "geo_enabled":           False,
+        "probe_threshold":       0.85,
+        "description":           "Minimal blocking for development and testing. Not for production."
+    }
+}
+
+def _get_policy() -> dict:
+    return _POLICY_CONFIGS.get(_POLICY_MODE, _POLICY_CONFIGS["balanced"])
+
+print(f"[POLICY] Mode: {_POLICY_MODE} — {_get_policy()['description']}")
+
 def _load_residual_probe():
     global _residual_probe, _residual_tokenizer, _residual_llm, _residual_pca
     try:
@@ -1903,7 +1947,7 @@ def _screen_with_probe(prompt_text: str) -> dict:
         with torch.no_grad():
             logits = _residual_probe(probe_input)
             score  = torch.softmax(logits, dim=-1)[0, 1].item()
-        blocked = score > _PROBE_THRESHOLD
+        blocked = score > _get_policy()["probe_threshold"]
         return {"blocked": blocked, "score": score}
     except Exception as _e:
         print(f"[PROBE] Screen error: {_e}")
@@ -2033,7 +2077,10 @@ async def proxy(request: Request, path: str,
 
     if BLOCK_MODE and is_inf and is_json:
         prompt_text = (body_dict.get("messages") or [{}])[-1].get("content", "")
-        phrase_fired, matched = _phrase_blocked(prompt_text)
+        if _get_policy()["phrase_enabled"]:
+            phrase_fired, matched = _phrase_blocked(prompt_text)
+        else:
+            phrase_fired, matched = False, None
         if phrase_fired:
             return JSONResponse(status_code=200, content={
                 "id": "blocked", "object": "chat.completion",
@@ -2092,7 +2139,8 @@ async def proxy(request: Request, path: str,
             _bf_result = _behavioral_filter.screen(prompt_text)
             if _bf_result.blocked:
                 # High confidence block — score > 0.7, block immediately
-                if _bf_result.score > 0.70:
+                _policy = _get_policy()
+            if _bf_result.score > _policy["svm_block_threshold"]:
                     return JSONResponse(status_code=200, content={
                         "id":"blocked","object":"chat.completion",
                         "choices":[{"index":0,"message":{"role":"assistant","content":"[BLOCKED by Arc Gate — behavioral direction]"},"finish_reason":"stop"}],
@@ -2105,8 +2153,8 @@ async def proxy(request: Request, path: str,
                         triggered_layers=[{"layer":"svm","signal":"behavioral_jailbreak_pattern","score":round(_bf_result.score,4)}]
                     )
                     })
-                else:
-                    # Borderline — route to LLM judge (score 0.25-0.70)
+                elif _bf_result.score > _policy["svm_judge_threshold"]:
+                    # Borderline — route to LLM judge
                     _upstream_key = hdrs.get("authorization","").replace("Bearer ","")
                     if _upstream_key in _DEMO_KEYS:
                         _upstream_key = os.environ.get("OPENAI_API_KEY","")
