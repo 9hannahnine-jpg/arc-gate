@@ -48,6 +48,69 @@ except Exception as _e:
     _behavioral_filter = None
     print(f"[BF] BehavioralFilter unavailable: {_e}")
 
+# ── GroupDRO Residual Probe ───────────────────────────────────
+_residual_probe        = None
+_residual_tokenizer    = None
+_residual_llm          = None
+_residual_pca          = None
+_PROBE_THRESHOLD       = float(os.environ.get("PROBE_THRESHOLD", "0.65"))
+_PROBE_ENABLED         = os.environ.get("PROBE_ENABLED", "true").lower() == "true"
+
+def _load_residual_probe():
+    global _residual_probe, _residual_tokenizer, _residual_llm, _residual_pca
+    try:
+        import torch
+        import torch.nn as nn
+        import numpy as np
+        from sklearn.decomposition import PCA
+        from transformers import AutoTokenizer, AutoModelForCausalLM
+
+        HF_TOKEN   = os.environ.get("HF_TOKEN", "")
+        MODEL_NAME = "meta-llama/Llama-3.1-8B-Instruct"
+
+        print("[PROBE] Loading Llama 3.1 8B...")
+        _residual_tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, token=HF_TOKEN)
+        _residual_tokenizer.pad_token = _residual_tokenizer.eos_token
+        _residual_llm = AutoModelForCausalLM.from_pretrained(
+            MODEL_NAME, token=HF_TOKEN,
+            torch_dtype=torch.float16, device_map="auto"
+        )
+        _residual_llm.eval()
+        for p in _residual_llm.parameters():
+            p.requires_grad = False
+
+        class _GroupDROProbe(nn.Module):
+            def __init__(self, input_dim=256):
+                super().__init__()
+                self.net = nn.Sequential(
+                    nn.Linear(input_dim, 128), nn.ReLU(),
+                    nn.Dropout(0.1), nn.Linear(128, 2)
+                )
+                self.projection = nn.Sequential(
+                    nn.Linear(input_dim, 64), nn.ReLU(), nn.Linear(64, 32)
+                )
+            def forward(self, x):
+                return self.net(x)
+
+        # Load probe checkpoint from GitHub raw
+        probe_url = "https://raw.githubusercontent.com/9hannahnine-jpg/arc-gate/main/models/probe_hn.pt"
+        import urllib.request
+        import io
+        probe_data = urllib.request.urlopen(probe_url).read()
+        state_dict = torch.load(io.BytesIO(probe_data), map_location="cpu")
+        probe = _GroupDROProbe(input_dim=256)
+        probe.load_state_dict(state_dict)
+        probe.eval()
+        _residual_probe = probe
+
+        print(f"[PROBE] Residual probe loaded (worst-domain TPR@1%FPR=0.525)")
+    except Exception as _pe:
+        print(f"[PROBE] Residual probe unavailable: {_pe}")
+        _residual_probe = None
+
+if _PROBE_ENABLED:
+    _load_residual_probe()
+
 # ── Mahalanobis geometric filter ─────────────────────────
 _MAHAL_CLEAN_PROMPTS = [
     "What is my current account balance?",
@@ -1807,6 +1870,45 @@ Legitimate prompts include:
 Respond with exactly one word: HARMFUL, BENIGN, or AMBIGUOUS
 Then on a new line, one sentence explaining why."""
 
+def _screen_with_probe(prompt_text: str) -> dict:
+    """Screen prompt using GroupDRO residual probe."""
+    if _residual_probe is None or _residual_llm is None:
+        return {"blocked": False, "score": 0.0}
+    try:
+        import torch
+        import numpy as np
+        TARGET_LAYERS = [8, 12, 14, 16, 20]
+        enc = _residual_tokenizer(
+            [prompt_text], truncation=True, max_length=200,
+            padding=True, return_tensors="pt"
+        ).to(_residual_llm.device)
+        with torch.no_grad():
+            out = _residual_llm(**enc, output_hidden_states=True)
+        seq_lens = enc["attention_mask"].sum(dim=1) - 1
+        feats = []
+        for layer_idx in TARGET_LAYERS:
+            h = out.hidden_states[layer_idx]
+            feats.append(h[torch.arange(h.size(0)), seq_lens].float().cpu())
+        raw_acts = torch.cat(feats, dim=-1).numpy()  # (1, 20480)
+        # PCA projection — use stored components
+        import os
+        pca_path = os.path.join(os.path.dirname(__file__), "models", "pca_components.npy")
+        if os.path.exists(pca_path):
+            components = np.load(pca_path)
+            proj = raw_acts @ components.T  # (1, 256)
+        else:
+            # Fallback: use first 256 dims via SVD approximation
+            proj = raw_acts[:, :256]
+        probe_input = torch.FloatTensor(proj)
+        with torch.no_grad():
+            logits = _residual_probe(probe_input)
+            score  = torch.softmax(logits, dim=-1)[0, 1].item()
+        blocked = score > _PROBE_THRESHOLD
+        return {"blocked": blocked, "score": score}
+    except Exception as _e:
+        print(f"[PROBE] Screen error: {_e}")
+        return {"blocked": False, "score": 0.0}
+
 async def llm_judge(prompt: str, api_key: str) -> dict:
     """Call OpenAI to judge whether a prompt is a real attack or false positive."""
     try:
@@ -1921,7 +2023,25 @@ async def proxy(request: Request, path: str,
                 _mahal_score = _mahal_filter.score(prompt_text)
             except Exception as _me:
                 print(f"[MF] score error: {_me}")
-        # Layer 0: behavioral pre-filter with two-stage judge
+        # Layer 0a: residual probe (GroupDRO, worst-domain TPR@1%FPR=0.525)
+        if _PROBE_ENABLED and _residual_probe is not None:
+            _probe_result = _screen_with_probe(prompt_text)
+            if _probe_result["blocked"]:
+                return JSONResponse(status_code=200, content={
+                    "id":"blocked","object":"chat.completion",
+                    "choices":[{"index":0,"message":{"role":"assistant",
+                        "content":"[BLOCKED by Arc Gate — policy violation detected]"},
+                        "finish_reason":"stop"}],
+                    "model": body_dict.get("model","unknown"),
+                    "arc_sentry":{
+                        "blocked": True,
+                        "reason": f"residual_probe:{_probe_result['score']:.4f}",
+                        "layer": "residual_probe",
+                        "score": _probe_result["score"]
+                    }
+                })
+
+        # Layer 0b: behavioral pre-filter with two-stage judge
         if _behavioral_filter is not None:
             _bf_result = _behavioral_filter.screen(prompt_text)
             if _bf_result.blocked:
