@@ -1909,6 +1909,44 @@ def _screen_with_probe(prompt_text: str) -> dict:
         print(f"[PROBE] Screen error: {_e}")
         return {"blocked": False, "score": 0.0}
 
+def _arc_sentry_response(
+    blocked: bool,
+    decision: str,           # "blocked" | "restricted_continue" | "allowed"
+    layer: str,              # which layer triggered
+    reason: str,             # machine-readable reason code
+    severity: str = "none",  # "none" | "low" | "medium" | "high" | "critical"
+    confidence: float = 0.0,
+    triggered_layers: list = None,
+    judge_reasoning: str = None,
+    suggested_rewrite: str = None,
+    extra: dict = None
+) -> dict:
+    """Canonical Arc Sentry response object."""
+    obj = {
+        "blocked":          blocked,
+        "decision":         decision,
+        "layer":            layer,
+        "reason":           reason,
+        "severity":         severity,
+        "confidence":       round(confidence, 4),
+        "triggered_layers": triggered_layers or [],
+        "policy_mode":      os.environ.get("ARC_POLICY_MODE", "balanced"),
+    }
+    if judge_reasoning:
+        obj["judge_reasoning"]   = judge_reasoning
+    if suggested_rewrite:
+        obj["suggested_rewrite"] = suggested_rewrite
+    if extra:
+        obj.update(extra)
+    return obj
+
+def _severity_from_score(score: float) -> str:
+    if score >= 0.90: return "critical"
+    if score >= 0.75: return "high"
+    if score >= 0.50: return "medium"
+    if score >= 0.25: return "low"
+    return "none"
+
 async def llm_judge(prompt: str, api_key: str) -> dict:
     """Call OpenAI to judge whether a prompt is a real attack or false positive."""
     try:
@@ -2002,7 +2040,11 @@ async def proxy(request: Request, path: str,
                 "choices": [{"index": 0, "message": {"role": "assistant",
                     "content": "[BLOCKED by Arc Sentry — prompt injection detected]"}, "finish_reason": "stop"}],
                 "model": body_dict.get("model", "unknown"),
-                "arc_sentry": {"blocked": True, "reason": f"phrase:{matched}"}
+                "arc_sentry": _arc_sentry_response(
+                            blocked=True, decision="blocked", layer="phrase",
+                            reason=f"phrase:{matched}", severity="high", confidence=0.95,
+                            triggered_layers=[{"layer":"phrase","signal":matched,"score":0.95}]
+                        )
             })
 
     # ── Prompt injection check (block mode) ───────────────────
@@ -2014,7 +2056,11 @@ async def proxy(request: Request, path: str,
                 "id":"blocked","object":"chat.completion",
                 "choices":[{"index":0,"message":{"role":"assistant","content":"[BLOCKED by Arc Gate — prompt injection detected]"},"finish_reason":"stop"}],
                 "model":body_dict.get("model","unknown"),
-                "arc_sentry":{"blocked":True,"reason":f"phrase:{matched}","layer":"phrase"}
+                "arc_sentry":_arc_sentry_response(
+                        blocked=True, decision="blocked", layer="phrase",
+                        reason=f"phrase:{matched}", severity="high", confidence=0.95,
+                        triggered_layers=[{"layer":"phrase","signal":matched,"score":0.95}]
+                    )
             })
         # Compute mahal score for logging (always, even if not blocked)
         _mahal_score = 0.0
@@ -2051,7 +2097,13 @@ async def proxy(request: Request, path: str,
                         "id":"blocked","object":"chat.completion",
                         "choices":[{"index":0,"message":{"role":"assistant","content":"[BLOCKED by Arc Gate — behavioral direction]"},"finish_reason":"stop"}],
                         "model":body_dict.get("model","unknown"),
-                        "arc_sentry":{"blocked":True,"reason":f"behavioral:{_bf_result.score:.4f}","layer":"behavioral_prefilter","score":_bf_result.score}
+                        "arc_sentry":_arc_sentry_response(
+                        blocked=True, decision="blocked", layer="behavioral_prefilter",
+                        reason="behavioral_jailbreak_pattern",
+                        severity=_severity_from_score(_bf_result.score),
+                        confidence=_bf_result.score,
+                        triggered_layers=[{"layer":"svm","signal":"behavioral_jailbreak_pattern","score":round(_bf_result.score,4)}]
+                    )
                     })
                 else:
                     # Borderline — route to LLM judge (score 0.25-0.70)
@@ -2064,7 +2116,18 @@ async def proxy(request: Request, path: str,
                             "id":"blocked","object":"chat.completion",
                             "choices":[{"index":0,"message":{"role":"assistant","content":"[BLOCKED by Arc Gate — verified harmful]"},"finish_reason":"stop"}],
                             "model":body_dict.get("model","unknown"),
-                            "arc_sentry":{"blocked":True,"reason":f"judge:harmful","layer":"llm_judge","score":_bf_result.score,"reasoning":_judge_result["reasoning"]}
+                            "arc_sentry":_arc_sentry_response(
+                            blocked=True, decision="blocked", layer="llm_judge",
+                            reason="judge_verified_harmful",
+                            severity=_severity_from_score(_bf_result.score),
+                            confidence=_bf_result.score,
+                            triggered_layers=[
+                                {"layer":"svm","signal":"behavioral_jailbreak_pattern","score":round(_bf_result.score,4)},
+                                {"layer":"llm_judge","signal":"harmful","score":1.0}
+                            ],
+                            judge_reasoning=_judge_result["reasoning"],
+                            suggested_rewrite="Rephrase your request to avoid instruction override language."
+                        )
                         })
                     # Judge said BENIGN or AMBIGUOUS — allow through
                     print(f"[JUDGE] Overrode block: {_judge_result['verdict']} — {prompt_text[:60]}")
@@ -2084,7 +2147,14 @@ async def proxy(request: Request, path: str,
                 "id":"blocked","object":"chat.completion",
                 "choices":[{"index":0,"message":{"role":"assistant","content":"[BLOCKED by Arc Gate — semantic injection detected]"},"finish_reason":"stop"}],
                 "model":body_dict.get("model","unknown"),
-                "arc_sentry":{"blocked":True,"reason":f"geometric:fr_z={fr_z}","layer":"geometric","fr_z":fr_z,"fr_dist":fr_dist}
+                "arc_sentry":_arc_sentry_response(
+                        blocked=True, decision="blocked", layer="geometric",
+                        reason="geometric_anomaly",
+                        severity=_severity_from_score(min(fr_dist/10.0, 1.0)),
+                        confidence=round(min(fr_dist/10.0, 1.0), 4),
+                        triggered_layers=[{"layer":"geometric","signal":"fr_geodesic_anomaly","score":round(fr_dist,4)}],
+                        extra={"fr_z": fr_z, "fr_dist": fr_dist}
+                    )
             })
 
         fwd = body_bytes
@@ -2222,7 +2292,10 @@ async def proxy(request: Request, path: str,
     try:
         rb2 = up.json()
         if isinstance(rb2, dict):
-            rb2['arc_sentry'] = {'blocked': False, 'layer': None}
+            rb2['arc_sentry'] = _arc_sentry_response(
+                blocked=False, decision="allowed", layer="none",
+                reason="passed_all_layers", severity="none", confidence=0.0
+            )
             import json as _json
             return Response(content=_json.dumps(rb2), status_code=up.status_code,
                           media_type='application/json')
