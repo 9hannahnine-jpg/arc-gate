@@ -2278,13 +2278,14 @@ async def proxy(request: Request, path: str,
                         "content": "[BLOCKED by Arc Gate — geometric drift detected]"
                     }, "finish_reason": "stop"}],
                     "model": rb.get("model", "unknown"),
-                    "arc_sentry": {
-                        "blocked": True,
-                        "layer": "geometric",
-                        "reason": f"geometric:combined={round(_sync_combined,3)}",
-                        "fr_z": round(_sync_fz, 3),
-                        "combined_score": round(_sync_combined, 3)
-                    }
+                    "arc_sentry": _arc_sentry_response(
+                        blocked=True, decision="blocked", layer="geometric",
+                        reason="geometric_drift_detected",
+                        severity=_severity_from_score(min(_sync_combined, 1.0)),
+                        confidence=round(min(_sync_combined, 1.0), 4),
+                        triggered_layers=[{"layer":"geometric","signal":"session_drift","score":round(_sync_combined,4)}],
+                        extra={"fr_z": round(_sync_fz,3), "combined_score": round(_sync_combined,3)}
+                    )
                 })
         except Exception as e:
             print(f"[GEO_SYNC] error: {e}")
