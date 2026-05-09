@@ -48,6 +48,45 @@ except Exception as _e:
     _behavioral_filter = None
     print(f"[BF] BehavioralFilter unavailable: {_e}")
 
+# ── TF-IDF Classifier (replaces SVM for high-coverage detection) ──
+_tfidf_char_vec = None
+_tfidf_word_vec = None
+_tfidf_clf      = None
+
+try:
+    import pickle, urllib.request, io
+    from scipy.sparse import hstack as _sp_hstack
+
+    def _load_pkl(fname):
+        url  = f"https://raw.githubusercontent.com/9hannahnine-jpg/arc-gate/main/models/{fname}"
+        data = urllib.request.urlopen(url).read()
+        return pickle.load(io.BytesIO(data))
+
+    print("[TFIDF] Loading char vectorizer...")
+    _tfidf_char_vec = _load_pkl("tfidf_char_vec.pkl")
+    print("[TFIDF] Loading word vectorizer...")
+    _tfidf_word_vec = _load_pkl("tfidf_word_vec.pkl")
+    print("[TFIDF] Loading classifier...")
+    _tfidf_clf      = _load_pkl("tfidf_clf2.pkl")
+    print("[TFIDF] TF-IDF classifier loaded (AUROC 0.905 WildGuard OOD)")
+except Exception as _te:
+    print(f"[TFIDF] Unavailable: {_te}")
+    _tfidf_char_vec = _tfidf_word_vec = _tfidf_clf = None
+
+def _tfidf_screen(prompt: str) -> dict:
+    """Screen prompt with TF-IDF char+word classifier."""
+    if _tfidf_clf is None:
+        return {"blocked": False, "score": 0.0}
+    try:
+        Xc    = _tfidf_char_vec.transform([prompt])
+        Xw    = _tfidf_word_vec.transform([prompt])
+        X     = _sp_hstack([Xc, Xw])
+        score = float(_tfidf_clf.predict_proba(X)[0, 1])
+        return {"blocked": False, "score": score}
+    except Exception as _e:
+        print(f"[TFIDF] Screen error: {_e}")
+        return {"blocked": False, "score": 0.0}
+
 # ── GroupDRO Residual Probe ───────────────────────────────────
 _residual_probe        = None
 _residual_tokenizer    = None
