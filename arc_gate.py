@@ -2616,70 +2616,69 @@ async def proxy(request: Request, path: str,
             out[k] = v
         return out
 
-    _ct = up.headers.get("content-type", "")
-    # Use already-parsed rb if available, otherwise parse fresh
-    _rb_for_inject = rb if isinstance(rb, dict) else None
-    if not _rb_for_inject and "json" in _ct:
-        try:
-            import json as _json2
-            _rb_for_inject = _json2.loads(up.content.decode("utf-8", errors="replace"))
-        except Exception as _pe:
-            print(f"[ARC_SENTRY] Parse failed: {_pe}")
-    if isinstance(_rb_for_inject, dict):
-        try:
-            rb2 = dict(_rb_for_inject)
-            if isinstance(rb2, dict):
-                for _ch in rb2.get("choices", []):
-                    _ch.pop("logprobs", None)
-                if _RESTRICTED_CONTINUE:
-                    rb2['arc_sentry'] = _arc_sentry_response(
-                        blocked=False, decision="restricted_continue", layer="llm_judge",
-                        reason="ambiguous_monitored", severity="low", confidence=0.5,
-                        triggered_layers=[{"layer":"llm_judge","signal":"ambiguous","score":0.5}],
-                        judge_reasoning="Request flagged as ambiguous. Continuing in monitored mode.",
-                        extra={
-                            "tau_sec":          _GEO_DATA.get("tau_sec"),
-                            "tau_star":         round(TAU_STAR, 6),
-                            "geometric_status": _GEO_DATA.get("geometric_status", "insufficient_history"),
-                            "D_sec":            _GEO_DATA.get("D_sec"),
-                            "turns":            _GEO_DATA.get("turns", 0),
-                            "threshold_crossed": (_GEO_DATA.get("tau_sec") or 999) < TAU_STAR,
-                        }
-                    )
-                    try:
-                        for _choice in rb2.get("choices", []):
-                            if _choice.get("message", {}).get("content"):
-                                _choice["message"]["content"] = "[Arc Gate: Monitored Response - potential policy concern detected]\n\n" + _choice["message"]["content"]
-                    except Exception:
-                        pass
-                else:
-                    _geo_extra = {
-                        "tau_sec":          _GEO_DATA.get("tau_sec"),
-                        "tau_star":         round(TAU_STAR, 6),
-                        "geometric_status": _GEO_DATA.get("geometric_status", "insufficient_history"),
-                        "D_sec":            _GEO_DATA.get("D_sec"),
-                        "lambda_sec":       _GEO_DATA.get("lambda_sec"),
-                        "v_fr":             _GEO_DATA.get("v_fr"),
-                        "a_fr":             _GEO_DATA.get("a_fr"),
-                        "turns":            _GEO_DATA.get("turns", 0),
-                        "threshold_crossed": (_GEO_DATA.get("tau_sec") or 999) < TAU_STAR,
-                    }
-                    rb2['arc_sentry'] = _arc_sentry_response(
-                        blocked=False, decision="allowed", layer="none",
-                        reason="passed_all_layers", severity="none", confidence=0.0,
-                        extra=_geo_extra
-                    )
-                from fastapi.responses import JSONResponse as _JSONResponse
-                return _JSONResponse(
-                    content=rb2,
-                    status_code=up.status_code,
-                    headers=_clean_headers(up.headers)
-                )
-        except Exception as _inj_err:
-            print(f"[ARC_SENTRY] Injection failed: {type(_inj_err).__name__}: {_inj_err}")
+    _HOP_BY_HOP = {"connection","keep-alive","proxy-authenticate","proxy-authorization","te","trailer","transfer-encoding","upgrade"}
+    _REMOVE_ON_REWRITE = {"content-length","content-encoding","transfer-encoding"}
+    def _clean_headers(hdrs):
+        out = {}
+        for k, v in hdrs.items():
+            lk = k.lower()
+            if lk in _HOP_BY_HOP: continue
+            if lk in _REMOVE_ON_REWRITE: continue
+            if lk == "content-type": continue
+            out[k] = v
+        return out
+    try:
+        import json as _json2
+        _raw2 = up.content.decode("utf-8", errors="replace")
+        rb2 = _json2.loads(_raw2)
+        if not isinstance(rb2, dict) or not rb2.get("choices"):
+            raise ValueError("not a valid completion response")
+        for _ch in rb2.get("choices", []):
+            _ch.pop("logprobs", None)
+        if _RESTRICTED_CONTINUE:
+            rb2['arc_sentry'] = _arc_sentry_response(
+                blocked=False, decision="restricted_continue", layer="llm_judge",
+                reason="ambiguous_monitored", severity="low", confidence=0.5,
+                triggered_layers=[{"layer":"llm_judge","signal":"ambiguous","score":0.5}],
+                judge_reasoning="Request flagged as ambiguous. Continuing in monitored mode.",
+                extra={
+                    "tau_sec":          _GEO_DATA.get("tau_sec"),
+                    "tau_star":         round(TAU_STAR, 6),
+                    "geometric_status": _GEO_DATA.get("geometric_status", "insufficient_history"),
+                    "D_sec":            _GEO_DATA.get("D_sec"),
+                    "turns":            _GEO_DATA.get("turns", 0),
+                    "threshold_crossed": (_GEO_DATA.get("tau_sec") or 999) < TAU_STAR,
+                }
+            )
+            try:
+                for _choice in rb2.get("choices", []):
+                    if _choice.get("message", {}).get("content"):
+                        _choice["message"]["content"] = "[Arc Gate: Monitored Response]\n\n" + _choice["message"]["content"]
+            except Exception: pass
+        else:
+            _geo_extra = {
+                "tau_sec":          _GEO_DATA.get("tau_sec"),
+                "tau_star":         round(TAU_STAR, 6),
+                "geometric_status": _GEO_DATA.get("geometric_status", "insufficient_history"),
+                "D_sec":            _GEO_DATA.get("D_sec"),
+                "lambda_sec":       _GEO_DATA.get("lambda_sec"),
+                "v_fr":             _GEO_DATA.get("v_fr"),
+                "a_fr":             _GEO_DATA.get("a_fr"),
+                "turns":            _GEO_DATA.get("turns", 0),
+                "threshold_crossed": (_GEO_DATA.get("tau_sec") or 999) < TAU_STAR,
+            }
+            rb2['arc_sentry'] = _arc_sentry_response(
+                blocked=False, decision="allowed", layer="none",
+                reason="passed_all_layers", severity="none", confidence=0.0,
+                extra=_geo_extra
+            )
+        from fastapi.responses import JSONResponse as _JSONResponse
+        return _JSONResponse(content=rb2, status_code=up.status_code, headers=_clean_headers(up.headers))
+    except Exception as _inj_err:
+        print(f"[ARC_SENTRY] Injection failed: {type(_inj_err).__name__}: {_inj_err}")
     return Response(
         content=up.content,
         status_code=up.status_code,
-        headers=_clean_headers(up.headers),
-        media_type=_ct or None
+        headers=_clean_headers(up.headers) if "_clean_headers" in dir() else {},
+        media_type=up.headers.get("content-type") or None
     )
