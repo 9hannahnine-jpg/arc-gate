@@ -125,25 +125,85 @@ document.getElementById('inp').addEventListener('keydown', function(e) {
 
 var tauStarPlugin = {
   id: 'tauStarLine',
-  afterDatasetsDraw: function(chart) {
+  beforeDatasetsDraw: function(chart) {
     var yScale = chart.scales.y;
     var area = chart.chartArea;
     if (!yScale || !area) return;
     var y = yScale.getPixelForValue(TAU_STAR);
     var ctx = chart.ctx;
     ctx.save();
-    ctx.setLineDash([6, 5]);
-    ctx.strokeStyle = '#f85149';
-    ctx.lineWidth = 1;
+    ctx.fillStyle = 'rgba(248,81,73,0.08)';
+    ctx.fillRect(area.left, y, area.right - area.left, area.bottom - y);
+    ctx.fillStyle = 'rgba(248,81,73,0.55)';
+    ctx.font = '10px "IBM Plex Mono", monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('danger zone', area.left + 8, Math.min(area.bottom - 8, y + 18));
+    ctx.restore();
+  },
+  afterDatasetsDraw: function(chart) {
+    var yScale = chart.scales.y;
+    var xScale = chart.scales.x;
+    var area = chart.chartArea;
+    if (!yScale || !xScale || !area) return;
+    var y = yScale.getPixelForValue(TAU_STAR);
+    var ctx = chart.ctx;
+    ctx.save();
+    ctx.setLineDash([8, 4]);
+    ctx.strokeStyle = '#ff6b6b';
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(area.left, y);
     ctx.lineTo(area.right, y);
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = '#f85149';
-    ctx.font = '10px "IBM Plex Mono", monospace';
+    var tauLabel = 'τ* = 1.2247';
+    ctx.font = '11px "IBM Plex Mono", monospace';
     ctx.textAlign = 'right';
-    ctx.fillText('τ* 1.2247', area.right - 4, y - 6);
+    var tauLabelWidth = ctx.measureText(tauLabel).width + 10;
+    ctx.fillStyle = 'rgba(248,81,73,0.18)';
+    ctx.fillRect(area.right - tauLabelWidth - 4, y - 19, tauLabelWidth, 15);
+    ctx.fillStyle = '#ff8a8a';
+    ctx.fillText(tauLabel, area.right - 9, y - 8);
+
+    var crossing = null;
+    for (var i = 0; i < _tauPoints.length; i++) {
+      if (_tauPoints[i].y <= TAU_STAR && (i === 0 || _tauPoints[i - 1].y > TAU_STAR)) {
+        crossing = _tauPoints[i];
+        break;
+      }
+    }
+    if (!crossing) {
+      for (var j = 0; j < _tauPoints.length; j++) {
+        if (_tauPoints[j].y <= TAU_STAR) {
+          crossing = _tauPoints[j];
+          break;
+        }
+      }
+    }
+    if (crossing) {
+      var px = xScale.getPixelForValue(crossing.x);
+      var py = yScale.getPixelForValue(crossing.y);
+      var label = 'Adversarial drift detected';
+      ctx.font = '10px "IBM Plex Mono", monospace';
+      var padX = 7;
+      var labelW = ctx.measureText(label).width + padX * 2;
+      var labelH = 18;
+      var bx = Math.min(Math.max(px + 10, area.left + 4), area.right - labelW - 4);
+      var by = Math.max(area.top + 4, py - 28);
+      ctx.strokeStyle = 'rgba(255,107,107,0.8)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(bx + 6, by + labelH);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(248,81,73,0.18)';
+      ctx.fillRect(bx, by, labelW, labelH);
+      ctx.strokeStyle = 'rgba(255,107,107,0.5)';
+      ctx.strokeRect(bx, by, labelW, labelH);
+      ctx.fillStyle = '#ffb3b3';
+      ctx.textAlign = 'left';
+      ctx.fillText(label, bx + padX, by + 12);
+    }
     ctx.restore();
   }
 };
