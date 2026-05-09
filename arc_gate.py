@@ -2604,13 +2604,29 @@ async def proxy(request: Request, path: str,
         except Exception as e:
             print(f"[GEO_SYNC] error: {e}")
     # Inject arc_sentry metadata into JSON responses
-    try:
-        rb2 = up.json()
-        # Strip logprobs from response to reduce size and avoid injection errors
-        if isinstance(rb2, dict):
-            for ch in rb2.get("choices", []):
-                ch.pop("logprobs", None)
-        if isinstance(rb2, dict):
+    _HOP_BY_HOP = {"connection","keep-alive","proxy-authenticate","proxy-authorization","te","trailer","transfer-encoding","upgrade"}
+    _REMOVE_ON_REWRITE = {"content-length","content-encoding","transfer-encoding"}
+    def _clean_headers(hdrs):
+        out = {}
+        for k, v in hdrs.items():
+            lk = k.lower()
+            if lk in _HOP_BY_HOP: continue
+            if lk in _REMOVE_ON_REWRITE: continue
+            if lk == "content-type": continue
+            out[k] = v
+        return out
+
+    _ct = up.headers.get("content-type", "")
+    if "application/json" in _ct:
+        try:
+            import json as _json
+            _raw = up.content.decode(up.encoding or "utf-8", errors="replace")
+            rb2  = _json.loads(_raw)
+            # Strip logprobs to keep response clean
+            if isinstance(rb2, dict):
+                for _ch in rb2.get("choices", []):
+                    _ch.pop("logprobs", None)
+            if isinstance(rb2, dict):
             if _RESTRICTED_CONTINUE:
                 rb2['arc_sentry'] = _arc_sentry_response(
                     blocked=False, decision="restricted_continue", layer="llm_judge",
