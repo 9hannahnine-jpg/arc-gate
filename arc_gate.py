@@ -2618,7 +2618,7 @@ async def proxy(request: Request, path: str,
 
     _ct = up.headers.get("content-type", "")
     # Use already-parsed rb if available, otherwise parse fresh
-    _rb_for_inject = rb if (rb and isinstance(rb, dict)) else None
+    _rb_for_inject = rb if isinstance(rb, dict) else None
     if not _rb_for_inject and "json" in _ct:
         try:
             import json as _json2
