@@ -2358,9 +2358,9 @@ async def proxy(request: Request, path: str,
                     for choice in rb2.get("choices", []):
                         if choice.get("message", {}).get("content"):
                             choice["message"]["content"] = (
-                                "[Arc Gate: Monitored Response — potential policy concern detected]
+                                "[Arc Gate: Monitored Response - potential policy concern detected]\n\n"
 
-"
+
                                 + choice["message"]["content"]
                             )
                 except Exception:
