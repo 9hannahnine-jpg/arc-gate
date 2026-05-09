@@ -101,16 +101,16 @@ _POLICY_MODE = os.environ.get("ARC_POLICY_MODE", "balanced").lower()
 
 _POLICY_CONFIGS = {
     "strict": {
-        "svm_block_threshold":   0.50,   # block at lower SVM score
-        "svm_judge_threshold":   0.15,   # route to judge sooner
+        "svm_block_threshold":   0.60,
+        "svm_judge_threshold":   0.20,
         "phrase_enabled":        True,
         "geo_enabled":           True,
         "probe_threshold":       0.55,
         "description":           "Maximum protection. Higher false positive rate. For high-risk deployments."
     },
     "balanced": {
-        "svm_block_threshold":   0.82,   # raised to reduce FPs on topic words
-        "svm_judge_threshold":   0.40,   # route borderline to judge
+        "svm_block_threshold":   0.85,
+        "svm_judge_threshold":   0.45,
         "phrase_enabled":        True,
         "geo_enabled":           True,
         "probe_threshold":       0.65,
@@ -2176,7 +2176,17 @@ async def proxy(request: Request, path: str,
                 })
 
         # Layer 0b: TF-IDF classifier (high-coverage, CPU-friendly)
-        _tfidf_result = _tfidf_screen(prompt_text)
+        # Whitelist: pass clearly legitimate educational/creative contexts
+        _WHITELIST_PATTERNS = [
+            "for my chemistry class", "for a chemistry class", "at a molecular level",
+            "write a story", "for a novel", "creative writing", "fiction",
+            "for my research", "academic", "educational purposes",
+            "how do i defend", "how to defend", "security training",
+            "for a security course", "security awareness",
+        ]
+        _prompt_lower = prompt_text.lower()
+        _whitelisted = any(p in _prompt_lower for p in _WHITELIST_PATTERNS)
+        _tfidf_result = _tfidf_screen(prompt_text) if not _whitelisted else {"score": 0.0}
         _policy = _get_policy()
         if _tfidf_result["score"] > _policy.get("svm_judge_threshold", 0.25):
             if _tfidf_result["score"] > _policy.get("svm_block_threshold", 0.70):
