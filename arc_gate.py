@@ -2617,11 +2617,17 @@ async def proxy(request: Request, path: str,
         return out
 
     _ct = up.headers.get("content-type", "")
-    if "application/json" in _ct:
+    # Use already-parsed rb if available, otherwise parse fresh
+    _rb_for_inject = rb if (rb and isinstance(rb, dict)) else None
+    if not _rb_for_inject and "json" in _ct:
         try:
             import json as _json2
-            _raw = up.content.decode(up.encoding or "utf-8", errors="replace")
-            rb2  = _json2.loads(_raw)
+            _rb_for_inject = _json2.loads(up.content.decode("utf-8", errors="replace"))
+        except Exception as _pe:
+            print(f"[ARC_SENTRY] Parse failed: {_pe}")
+    if isinstance(_rb_for_inject, dict):
+        try:
+            rb2 = dict(_rb_for_inject)
             if isinstance(rb2, dict):
                 for _ch in rb2.get("choices", []):
                     _ch.pop("logprobs", None)
