@@ -511,6 +511,8 @@ INJECTION_PHRASES = [
     "filters are disabled", "safe mode off", "safety off", "filters off",
     # Explicit persona hijack with harmful intent
     "evil ai", "unrestricted ai", "dan mode", "aim mode", "stan mode",
+    "you are dan", "you are now dan", "act as dan", "an ai with no restrictions",
+    "ai with no restrictions", "without any restrictions", "no restrictions whatsoever",
     "ai character has no rules", "character has no restrictions",
     "you have been liberated", "freed from your constraints",
     "you are free now", "no longer an ai",
