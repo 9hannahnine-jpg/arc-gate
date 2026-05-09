@@ -109,8 +109,8 @@ _POLICY_CONFIGS = {
         "description":           "Maximum protection. Higher false positive rate. For high-risk deployments."
     },
     "balanced": {
-        "svm_block_threshold":   0.70,   # default
-        "svm_judge_threshold":   0.25,   # default
+        "svm_block_threshold":   0.82,   # raised to reduce FPs on topic words
+        "svm_judge_threshold":   0.40,   # route borderline to judge
         "phrase_enabled":        True,
         "geo_enabled":           True,
         "probe_threshold":       0.65,
