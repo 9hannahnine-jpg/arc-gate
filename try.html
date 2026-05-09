@@ -4,6 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Try Arc Gate</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -45,6 +46,16 @@ h1{font-family:"IBM Plex Mono",monospace;font-size:22px;font-weight:700;margin-b
 .stat{text-align:center;}
 .stat-val{font-family:"IBM Plex Mono",monospace;font-size:18px;font-weight:700;color:var(--accent);}
 .stat-label{font-family:"IBM Plex Mono",monospace;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-top:2px;}
+.tau-card{margin-top:20px;background:var(--bg2);border:1px solid var(--border);}
+.tau-card-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);}
+.tau-card-title{font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;}
+.tau-legend{font-family:"IBM Plex Mono",monospace;font-size:9px;color:var(--text3);}
+.tau-legend span{display:inline-flex;align-items:center;gap:5px;margin-left:10px;}
+.tau-dot{width:7px;height:7px;border-radius:50%;display:inline-block;}
+.tau-dot.pass{background:var(--green);}
+.tau-dot.block{background:var(--danger);}
+.tau-chart-wrap{height:180px;padding:14px 16px 18px;}
+.tau-empty{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--text3);padding:0 16px 14px;}
 </style>
 </head>
 <body>
@@ -68,6 +79,14 @@ h1{font-family:"IBM Plex Mono",monospace;font-size:22px;font-weight:700;margin-b
       <span><a href="https://web-production-6e47f.up.railway.app/dashboard">Dashboard</a> &nbsp;·&nbsp; <a href="https://github.com/9hannahnine-jpg/arc-gate">GitHub</a> &nbsp;·&nbsp; <a href="https://bendexgeometry.com">bendexgeometry.com</a></span>
     </div>
   </div>
+  <div class="tau-card">
+    <div class="tau-card-hdr">
+      <span class="tau-card-title">τ_sec trajectory</span>
+      <span class="tau-legend"><span><i class="tau-dot pass"></i>passing</span><span><i class="tau-dot block"></i>blocked</span></span>
+    </div>
+    <div class="tau-chart-wrap"><canvas id="tau-chart"></canvas></div>
+    <div class="tau-empty" id="tau-empty">Waiting for enough session history to plot τ_sec.</div>
+  </div>
   <div class="stats">
     <div class="stat"><div class="stat-val">0.947</div><div class="stat-label">F1 Score</div></div>
     <div class="stat"><div class="stat-val">0.90</div><div class="stat-label">Recall</div></div>
@@ -77,6 +96,10 @@ h1{font-family:"IBM Plex Mono",monospace;font-size:22px;font-weight:700;margin-b
 </div>
 <script>
 var API = 'https://web-production-6e47f.up.railway.app';
+var TAU_STAR = 1.2247;
+var _tauChart = null;
+var _tauPoints = [];
+var _tauResponseTurn = 0;
 var EXAMPLES = [
   {label:'Normal', text:'What are your business hours?'},
   {label:'Normal', text:'How do I reset my password?'},
@@ -99,6 +122,89 @@ EXAMPLES.forEach(function(e, i) {
 document.getElementById('inp').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') send();
 });
+
+var tauStarPlugin = {
+  id: 'tauStarLine',
+  afterDatasetsDraw: function(chart) {
+    var yScale = chart.scales.y;
+    var area = chart.chartArea;
+    if (!yScale || !area) return;
+    var y = yScale.getPixelForValue(TAU_STAR);
+    var ctx = chart.ctx;
+    ctx.save();
+    ctx.setLineDash([6, 5]);
+    ctx.strokeStyle = '#f85149';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(area.left, y);
+    ctx.lineTo(area.right, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#f85149';
+    ctx.font = '10px "IBM Plex Mono", monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText('τ* 1.2247', area.right - 4, y - 6);
+    ctx.restore();
+  }
+};
+
+function initTauChart() {
+  var canvas = document.getElementById('tau-chart');
+  if (!canvas || typeof Chart === 'undefined') return;
+  _tauChart = new Chart(canvas, {
+    type: 'line',
+    data: {datasets: [{
+      label: 'τ_sec',
+      data: [],
+      borderColor: '#79c0ff',
+      backgroundColor: 'rgba(121,192,255,0.08)',
+      borderWidth: 2,
+      pointRadius: 4,
+      pointHoverRadius: 5,
+      pointBackgroundColor: [],
+      pointBorderColor: [],
+      tension: 0.25,
+      parsing: false
+    }]},
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {legend: {display: false}, tooltip: {callbacks: {label: function(ctx) { return 'τ_sec: ' + ctx.parsed.y.toFixed(4); }}}},
+      scales: {
+        x: {type: 'linear', title: {display: true, text: 'Turn', color: '#8b949e'}, ticks: {color: '#8b949e', stepSize: 1, precision: 0}, grid: {color: 'rgba(255,255,255,0.04)'}},
+        y: {min: 0, max: 2.5, title: {display: true, text: 'τ_sec', color: '#8b949e'}, ticks: {color: '#8b949e'}, grid: {color: 'rgba(255,255,255,0.04)'}}
+      }
+    },
+    plugins: [tauStarPlugin]
+  });
+}
+
+function recordTauPoint(arc) {
+  if (!arc || typeof arc !== 'object' || !Object.keys(arc).length) return;
+  _tauResponseTurn += 1;
+  if (arc.tau_sec === null || arc.tau_sec === undefined) return;
+  var tau = Number(arc.tau_sec);
+  if (!isFinite(tau)) return;
+  var turn = Number(arc.turns);
+  if (!isFinite(turn) || turn <= 0) turn = _tauResponseTurn;
+  _tauPoints.push({x: turn, y: tau, blocked: !!arc.blocked});
+  updateTauChart();
+}
+
+function updateTauChart() {
+  if (!_tauChart) initTauChart();
+  if (!_tauChart) return;
+  var ds = _tauChart.data.datasets[0];
+  ds.data = _tauPoints.map(function(p) { return {x: p.x, y: p.y}; });
+  ds.pointBackgroundColor = _tauPoints.map(function(p) { return p.blocked ? '#f85149' : '#3fb950'; });
+  ds.pointBorderColor = ds.pointBackgroundColor;
+  var empty = document.getElementById('tau-empty');
+  if (empty) empty.style.display = _tauPoints.length ? 'none' : 'block';
+  _tauChart.update();
+}
+
+initTauChart();
 
 var _sending = false;
 function send() {
@@ -128,6 +234,7 @@ function send() {
   .then(function(r) { return r.json(); })
   .then(function(data) {
     var arc = data.arc_sentry || {};
+    recordTauPoint(arc);
     var result = msg.querySelector('.msg-result');
     if (arc.blocked) {
       result.className = 'msg-result blocked';

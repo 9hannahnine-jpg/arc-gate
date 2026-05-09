@@ -92,6 +92,16 @@ header{height:48px;display:flex;align-items:center;justify-content:space-between
 .send-btn{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;padding:14px 18px;background:none;border:none;border-left:1px solid var(--border);color:var(--accent);cursor:pointer;white-space:nowrap;}
 .send-btn:hover{color:#fff;}
 .demo-footer{padding:9px 18px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text4);border-top:1px solid var(--border);}
+.demo-tau-card{border-top:1px solid var(--border);background:rgba(121,192,255,0.015);}
+.demo-tau-hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 18px 0;}
+.demo-tau-title{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text2);}
+.demo-tau-legend{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text3);}
+.demo-tau-legend span{display:inline-flex;align-items:center;gap:5px;margin-left:10px;}
+.demo-tau-dot{width:7px;height:7px;border-radius:50%;display:inline-block;}
+.demo-tau-dot.pass{background:var(--green);}
+.demo-tau-dot.block{background:var(--danger);}
+.demo-tau-chart-wrap{height:150px;padding:10px 18px 14px;}
+.demo-tau-empty{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text3);padding:0 18px 12px;}
 .detail-wrap{padding:24px;}
 .detail-hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;}
 .detail-name{font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:700;margin-bottom:4px;}
@@ -194,6 +204,8 @@ var API = 'https://web-production-6e47f.up.railway.app';
 var _apiKey=null, _userEmail=null, _isDemo=false;
 var _selDep=null, _selVer='default', _refreshTimer=null;
 var _charts={}, _allTraces=[];
+var DEMO_TAU_STAR = 1.2247;
+var _demoTauChart=null, _demoTauPoints=[], _demoTauResponseTurn=0;
 
 var EXAMPLES = [
   {label:'Normal', text:'What are your business hours?'},
@@ -643,9 +655,100 @@ async function _loadCharts() {
   mkChart('chart-lat', traces.map(function(t) { return t.latency_ms||0; }), '#3fb950');
 }
 
+var demoTauStarPlugin = {
+  id: 'demoTauStarLine',
+  afterDatasetsDraw: function(chart) {
+    var yScale = chart.scales.y;
+    var area = chart.chartArea;
+    if (!yScale || !area) return;
+    var y = yScale.getPixelForValue(DEMO_TAU_STAR);
+    var ctx = chart.ctx;
+    ctx.save();
+    ctx.setLineDash([6, 5]);
+    ctx.strokeStyle = '#f85149';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(area.left, y);
+    ctx.lineTo(area.right, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#f85149';
+    ctx.font = '10px "IBM Plex Mono", monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText('τ* 1.2247', area.right - 4, y - 6);
+    ctx.restore();
+  }
+};
+
+function resetDemoTauChart() {
+  if (_demoTauChart) {
+    _demoTauChart.destroy();
+    _demoTauChart = null;
+  }
+  _demoTauPoints = [];
+  _demoTauResponseTurn = 0;
+}
+
+function initDemoTauChart() {
+  var canvas = document.getElementById('demo-tau-chart');
+  if (!canvas || typeof Chart === 'undefined') return;
+  _demoTauChart = new Chart(canvas, {
+    type: 'line',
+    data: {datasets: [{
+      label: 'τ_sec',
+      data: [],
+      borderColor: '#79c0ff',
+      backgroundColor: 'rgba(121,192,255,0.08)',
+      borderWidth: 2,
+      pointRadius: 4,
+      pointHoverRadius: 5,
+      pointBackgroundColor: [],
+      pointBorderColor: [],
+      tension: 0.25,
+      parsing: false
+    }]},
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {legend: {display: false}, tooltip: {callbacks: {label: function(ctx) { return 'τ_sec: ' + ctx.parsed.y.toFixed(4); }}}},
+      scales: {
+        x: {type: 'linear', title: {display: true, text: 'Turn', color: '#8b949e'}, ticks: {color: '#8b949e', stepSize: 1, precision: 0}, grid: {color: 'rgba(255,255,255,0.04)'}},
+        y: {min: 0, max: 2.5, title: {display: true, text: 'τ_sec', color: '#8b949e'}, ticks: {color: '#8b949e'}, grid: {color: 'rgba(255,255,255,0.04)'}}
+      }
+    },
+    plugins: [demoTauStarPlugin]
+  });
+}
+
+function recordDemoTauPoint(arc) {
+  if (!arc || typeof arc !== 'object' || !Object.keys(arc).length) return;
+  _demoTauResponseTurn += 1;
+  if (arc.tau_sec === null || arc.tau_sec === undefined) return;
+  var tau = Number(arc.tau_sec);
+  if (!isFinite(tau)) return;
+  var turn = Number(arc.turns);
+  if (!isFinite(turn) || turn <= 0) turn = _demoTauResponseTurn;
+  _demoTauPoints.push({x: turn, y: tau, blocked: !!arc.blocked});
+  updateDemoTauChart();
+}
+
+function updateDemoTauChart() {
+  if (!_demoTauChart) initDemoTauChart();
+  if (!_demoTauChart) return;
+  var ds = _demoTauChart.data.datasets[0];
+  ds.data = _demoTauPoints.map(function(p) { return {x: p.x, y: p.y}; });
+  ds.pointBackgroundColor = _demoTauPoints.map(function(p) { return p.blocked ? '#f85149' : '#3fb950'; });
+  ds.pointBorderColor = ds.pointBackgroundColor;
+  var empty = document.getElementById('demo-tau-empty');
+  if (empty) empty.style.display = _demoTauPoints.length ? 'none' : 'block';
+  _demoTauChart.update();
+}
+
 function showLiveDemo() {
   if (_refreshTimer) clearInterval(_refreshTimer);
   _selDep = null;
+  resetDemoTauChart();
   document.querySelectorAll('.dep-item').forEach(function(e) { e.classList.remove('active'); });
   var main = document.getElementById('main');
   var exBtns = EXAMPLES.map(function(e, i) {
@@ -661,9 +764,15 @@ function showLiveDemo() {
     + '<div class="demo-widget-hdr"><span class="demo-widget-title">Arc Gate</span><span class="live-pill"><span class="live-pill-dot"></span>live</span></div>'
     + '<div class="examples-row">' + exBtns + '</div>'
     + '<div class="msgs" id="demo-msgs"><div class="msg-hint">Click an example or type your own prompt.</div></div>'
+    + '<div class="demo-tau-card">'
+    + '<div class="demo-tau-hdr"><span class="demo-tau-title">τ_sec trajectory</span><span class="demo-tau-legend"><span><i class="demo-tau-dot pass"></i>passing</span><span><i class="demo-tau-dot block"></i>blocked</span></span></div>'
+    + '<div class="demo-tau-chart-wrap"><canvas id="demo-tau-chart"></canvas></div>'
+    + '<div class="demo-tau-empty" id="demo-tau-empty">Waiting for enough session history to plot τ_sec.</div>'
+    + '</div>'
     + '<div class="inp-row"><input class="demo-inp" id="demo-inp" placeholder="Type any prompt..." maxlength="500" /><button class="send-btn" id="demo-send-btn" onclick="demoSend()">Send</button></div>'
     + '<div class="demo-footer">Bendex Geometry</div>'
     + '</div></div>';
+  initDemoTauChart();
   document.getElementById('demo-inp').addEventListener('keydown', function(e) {
     if (e.key === 'Enter') demoSend();
   });
@@ -693,6 +802,7 @@ function demoSend() {
     headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer demo'},
     body: JSON.stringify({model: 'gpt-3.5-turbo', messages: [{role: 'user', content: text}], max_tokens: 300})
   }).then(function(res) { return res.json(); }).then(function(d) {
+    recordDemoTauPoint(d.arc_sentry);
     if (d.arc_sentry && d.arc_sentry.blocked) {
       r.className = 'msg-blocked';
       var as = d.arc_sentry;
