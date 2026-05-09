@@ -2627,12 +2627,10 @@ async def proxy(request: Request, path: str,
             if lk == "content-type": continue
             out[k] = v
         return out
-    print(f"[DEBUG] content-type={up.headers.get('content-type')} content_len={len(up.content)}")
     try:
         import json as _json2
         _raw2 = up.content.decode("utf-8", errors="replace")
         rb2 = _json2.loads(_raw2)
-        print(f"[DEBUG] rb2 keys={list(rb2.keys()) if isinstance(rb2,dict) else type(rb2)}")
         if not isinstance(rb2, dict) or not rb2.get("choices"):
             raise ValueError("not a valid completion response")
         for _ch in rb2.get("choices", []):
