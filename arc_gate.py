@@ -2606,6 +2606,10 @@ async def proxy(request: Request, path: str,
     # Inject arc_sentry metadata into JSON responses
     try:
         rb2 = up.json()
+        # Strip logprobs from response to reduce size and avoid injection errors
+        if isinstance(rb2, dict):
+            for ch in rb2.get("choices", []):
+                ch.pop("logprobs", None)
         if isinstance(rb2, dict):
             if _RESTRICTED_CONTINUE:
                 rb2['arc_sentry'] = _arc_sentry_response(
