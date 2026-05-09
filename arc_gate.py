@@ -2145,13 +2145,13 @@ async def proxy(request: Request, path: str,
                         "id":"blocked","object":"chat.completion",
                         "choices":[{"index":0,"message":{"role":"assistant","content":"[BLOCKED by Arc Gate — behavioral direction]"},"finish_reason":"stop"}],
                         "model":body_dict.get("model","unknown"),
-                        "arc_sentry":_arc_sentry_response(
-                        blocked=True, decision="blocked", layer="behavioral_prefilter",
-                        reason="behavioral_jailbreak_pattern",
-                        severity=_severity_from_score(_bf_result.score),
-                        confidence=_bf_result.score,
-                        triggered_layers=[{"layer":"svm","signal":"behavioral_jailbreak_pattern","score":round(_bf_result.score,4)}]
-                    )
+                        "arc_sentry": _arc_sentry_response(
+                            blocked=True, decision="blocked", layer="behavioral_prefilter",
+                            reason="behavioral_jailbreak_pattern",
+                            severity=_severity_from_score(_bf_result.score),
+                            confidence=_bf_result.score,
+                            triggered_layers=[{"layer":"svm","signal":"behavioral_jailbreak_pattern","score":round(_bf_result.score,4)}]
+                        )
                     })
                 elif _bf_result.score > _policy["svm_judge_threshold"]:
                     # Borderline — route to LLM judge
