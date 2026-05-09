@@ -2626,7 +2626,7 @@ async def proxy(request: Request, path: str,
             if isinstance(rb2, dict):
                 for _ch in rb2.get("choices", []):
                     _ch.pop("logprobs", None)
-            if isinstance(rb2, dict):
+
             if _RESTRICTED_CONTINUE:
                 rb2['arc_sentry'] = _arc_sentry_response(
                     blocked=False, decision="restricted_continue", layer="llm_judge",
