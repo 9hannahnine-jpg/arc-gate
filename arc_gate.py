@@ -2612,7 +2612,15 @@ async def proxy(request: Request, path: str,
                     blocked=False, decision="restricted_continue", layer="llm_judge",
                     reason="ambiguous_monitored", severity="low", confidence=0.5,
                     triggered_layers=[{"layer":"llm_judge","signal":"ambiguous","score":0.5}],
-                    judge_reasoning="Request flagged as ambiguous. Continuing in monitored mode."
+                    judge_reasoning="Request flagged as ambiguous. Continuing in monitored mode.",
+                    extra={
+                        "tau_sec":          _GEO_DATA.get("tau_sec"),
+                        "tau_star":         round(TAU_STAR, 6),
+                        "geometric_status": _GEO_DATA.get("geometric_status", "insufficient_history"),
+                        "D_sec":            _GEO_DATA.get("D_sec"),
+                        "turns":            _GEO_DATA.get("turns", 0),
+                        "threshold_crossed": (_GEO_DATA.get("tau_sec") or 999) < TAU_STAR,
+                    }
                 )
                 # Prepend warning to response content
                 try:
@@ -2627,17 +2635,16 @@ async def proxy(request: Request, path: str,
                 except Exception:
                     pass
             else:
-                _geo_extra = {}
-                if _GEO_DATA:
-                    _geo_extra = {
+                _geo_extra = {
                         "tau_sec":          _GEO_DATA.get("tau_sec"),
-                        "tau_star":         TAU_STAR,
-                        "geometric_status": _GEO_DATA.get("geometric_status"),
+                        "tau_star":         round(TAU_STAR, 6),
+                        "geometric_status": _GEO_DATA.get("geometric_status", "insufficient_history"),
                         "D_sec":            _GEO_DATA.get("D_sec"),
                         "lambda_sec":       _GEO_DATA.get("lambda_sec"),
                         "v_fr":             _GEO_DATA.get("v_fr"),
                         "a_fr":             _GEO_DATA.get("a_fr"),
-                        "turns":            _GEO_DATA.get("turns"),
+                        "turns":            _GEO_DATA.get("turns", 0),
+                        "threshold_crossed": (_GEO_DATA.get("tau_sec") or 999) < TAU_STAR,
                     }
                 rb2['arc_sentry'] = _arc_sentry_response(
                     blocked=False, decision="allowed", layer="none",
