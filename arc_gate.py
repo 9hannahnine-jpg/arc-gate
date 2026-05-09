@@ -2556,6 +2556,33 @@ async def proxy(request: Request, path: str,
                 if step % CHECKPOINT_EVERY == 0: store.checkpoint(did, version)
             except Exception as e: print("[ERROR] " + str(e))
         asyncio.create_task(_monitor())
+        # Inject arc_sentry into allowed response
+        if is_inf and isinstance(rb, dict) and rb.get("choices"):
+            try:
+                _as_payload = _arc_sentry_response(
+                    blocked=False, decision="allowed", layer="none",
+                    reason="passed_all_layers", severity="none", confidence=0.0,
+                    extra={
+                        "tau_sec":          _GEO_DATA.get("tau_sec"),
+                        "tau_star":         round(TAU_STAR, 6),
+                        "geometric_status": _GEO_DATA.get("geometric_status", "insufficient_history"),
+                        "D_sec":            _GEO_DATA.get("D_sec"),
+                        "lambda_sec":       _GEO_DATA.get("lambda_sec"),
+                        "v_fr":             _GEO_DATA.get("v_fr"),
+                        "a_fr":             _GEO_DATA.get("a_fr"),
+                        "turns":            _GEO_DATA.get("turns", 0),
+                        "threshold_crossed": (_GEO_DATA.get("tau_sec") or 999) < TAU_STAR,
+                    }
+                )
+                _rb_out = dict(rb)
+                for _ch in _rb_out.get("choices", []):
+                    _ch.pop("logprobs", None)
+                _rb_out["arc_sentry"] = _as_payload
+                _hop = {"connection","keep-alive","transfer-encoding","content-encoding","content-length"}
+                _clean_hdrs = {k: v for k, v in up.headers.items() if k.lower() not in _hop and k.lower() != "content-type"}
+                return JSONResponse(content=_rb_out, status_code=up.status_code, headers=_clean_hdrs)
+            except Exception as _ae:
+                print(f"[ARC_SENTRY] allowed injection failed: {_ae}")
     _sync_observed = False
     # ── Synchronous geometric block (response-side FR-Z) ──────────────────
     if is_inf and rb:
