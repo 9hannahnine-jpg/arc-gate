@@ -54,7 +54,7 @@ _residual_tokenizer    = None
 _residual_llm          = None
 _residual_pca          = None
 _PROBE_THRESHOLD       = float(os.environ.get("PROBE_THRESHOLD", "0.65"))
-_PROBE_ENABLED         = os.environ.get("PROBE_ENABLED", "true").lower() == "true"
+_PROBE_ENABLED         = os.environ.get("PROBE_ENABLED", "false").lower() == "true"
 
 # ── Policy Modes ─────────────────────────────────────────────
 # Set ARC_POLICY_MODE env var: strict | balanced | research | developer
