@@ -2140,7 +2140,7 @@ async def proxy(request: Request, path: str,
             if _bf_result.blocked:
                 # High confidence block — score > 0.7, block immediately
                 _policy = _get_policy()
-            if _bf_result.score > _policy["svm_block_threshold"]:
+                if _bf_result.score > _policy["svm_block_threshold"]:
                     return JSONResponse(status_code=200, content={
                         "id":"blocked","object":"chat.completion",
                         "choices":[{"index":0,"message":{"role":"assistant","content":"[BLOCKED by Arc Gate — behavioral direction]"},"finish_reason":"stop"}],
