@@ -139,6 +139,125 @@ def _get_policy() -> dict:
 
 print(f"[POLICY] Mode: {_POLICY_MODE} — {_get_policy()['description']}")
 
+# ══════════════════════════════════════════════════════════════
+# GEOMETRIC SESSION MONITOR — Nine (2026) Paper 7
+# Models conversation as trajectory on H²_intent × H²_authority
+# τ* = √(3/2) ≈ 1.2247 derived from Fisher manifold geometry
+# ══════════════════════════════════════════════════════════════
+
+import math
+TAU_STAR = math.sqrt(3.0 / 2.0)   # ≈ 1.2247 — geometric threshold
+TAU_WARN = TAU_STAR * 1.05         # early warning band above τ*
+T_WINDOW = 4                        # minimum turns before geometric monitoring
+
+# Authority/tool fields get 2x weight per expert guidance
+_W = [1.0, 2.0, 2.0, 1.5, 1.0, 1.0, 1.0]  # weights for z_t components
+
+def _compute_z(
+    classifier_risk: float,    # TF-IDF/SVM score 0-1
+    authority_violation: float, # phrase layer hit on authority claim 0/1
+    tool_pressure: float,       # tool output attempting instruction authority 0/1
+    role_confusion: float,      # persona hijack / role override attempt 0/1
+    secret_seeking: float,      # asking for system prompt / hidden info 0/1
+    intent_shift: float,        # semantic shift from prior turn 0-1
+    judge_risk: float,          # LLM judge risk score 0-1
+) -> list:
+    return [classifier_risk, authority_violation, tool_pressure,
+            role_confusion, secret_seeking, intent_shift, judge_risk]
+
+def _weighted_dist(z1: list, z2: list) -> float:
+    """Weighted Euclidean distance between security state vectors."""
+    return math.sqrt(sum(_W[i] * (z1[i] - z2[i])**2 for i in range(len(_W))))
+
+def _compute_tau_sec(session_state: dict) -> dict:
+    """
+    Compute τ_sec(t) from session history.
+    Returns geometric status and τ_sec value.
+    Based on Nine (2026) Paper 3 stability scalar D(t).
+    """
+    history = session_state.get("z_history", [])
+    n = len(history)
+
+    if n < T_WINDOW:
+        return {
+            "tau_sec": None,
+            "geometric_status": "insufficient_history",
+            "D_sec": None,
+            "lambda_sec": None,
+            "v_fr": None,
+            "a_fr": None,
+            "turns": n
+        }
+
+    # Compute per-turn drift velocities δ(t) = ||z_t - z_{t-1}||_W
+    deltas = []
+    for i in range(1, n):
+        deltas.append(_weighted_dist(history[i], history[i-1]))
+
+    # Local stability: ratio of previous to current drift
+    delta_curr = deltas[-1] + 1e-8
+    delta_prev = deltas[-2] + 1e-8 if len(deltas) >= 2 else delta_curr
+    S_local = delta_prev / delta_curr
+
+    # Global stability: ratio of T-window-ago to current drift
+    delta_old = deltas[max(0, len(deltas) - T_WINDOW)] + 1e-8
+    S_global  = delta_old / delta_curr
+
+    # D_sec = log(S_global) - log(S_local) — Paper 3 stability scalar
+    D_sec = math.log(max(S_global, 1e-8)) - math.log(max(S_local, 1e-8))
+
+    # λ_sec = D_sec / (Δt - T) — Paper 3 eigenvalue estimate
+    delta_t  = n
+    T        = T_WINDOW
+    denom    = max(delta_t - T, 1)
+    lambda_sec = D_sec / denom
+
+    # τ_sec = √(3 / (λ_sec + 2)) — inverted from Paper 3 eigenvalue
+    inner = lambda_sec + 2.0
+    if inner <= 0:
+        tau_sec = 0.0
+    else:
+        tau_sec = math.sqrt(3.0 / inner)
+
+    # Velocity and acceleration for M(τ) early warning
+    v_fr = deltas[-1]
+    a_fr = deltas[-1] - deltas[-2] if len(deltas) >= 2 else 0.0
+
+    # Geometric decision
+    if tau_sec > TAU_WARN:
+        status = "stable"
+    elif tau_sec > TAU_STAR:
+        status = "warning"       # approaching τ* — early warning
+    else:
+        status = "adversarial"   # crossed τ* — adversarial drift
+
+    return {
+        "tau_sec":          round(tau_sec, 6),
+        "tau_star":         round(TAU_STAR, 6),
+        "geometric_status": status,
+        "D_sec":            round(D_sec, 6),
+        "lambda_sec":       round(lambda_sec, 6),
+        "v_fr":             round(v_fr, 6),
+        "a_fr":             round(a_fr, 6),
+        "turns":            n
+    }
+
+def _update_session_geometry(session_key: str, z_t: list, sessions: dict) -> dict:
+    """Update session geometric state with new security state vector."""
+    if session_key not in sessions:
+        sessions[session_key] = {"z_history": [], "tau_history": []}
+    sess = sessions[session_key]
+    sess["z_history"].append(z_t)
+    geo = _compute_tau_sec(sess)
+    sess["tau_history"].append(geo.get("tau_sec"))
+    return geo
+
+# Global session geometry store
+_geo_sessions: dict = {}
+
+# ══════════════════════════════════════════════════════════════
+
+
 def _load_residual_probe():
     global _residual_probe, _residual_tokenizer, _residual_llm, _residual_pca
     try:
@@ -2226,6 +2345,56 @@ async def proxy(request: Request, path: str,
                         )
                     })
 
+        # ── Geometric Session Monitor (Nine 2026, Paper 7) ──────
+        # Build security state vector z_t from current turn signals
+        _z_classifier  = _tfidf_result.get("score", 0.0)
+        _z_authority   = 1.0 if (phrase_fired and matched and
+                         any(x in matched for x in ["override","authority","operator","owner","creator"])) else 0.0
+        _z_tool        = 0.0  # populated when tool calls implemented
+        _z_role        = 1.0 if (phrase_fired and matched and
+                         any(x in matched for x in ["dan","persona","character","role","act as"])) else 0.0
+        _z_secret      = 1.0 if (phrase_fired and matched and
+                         any(x in matched for x in ["system prompt","hidden","secret","reveal"])) else 0.0
+        _z_intent      = min(_z_classifier * 1.5, 1.0)  # intent shift proxy
+        _z_judge       = 0.0  # populated if judge fires
+
+        _z_t = _compute_z(_z_classifier, _z_authority, _z_tool,
+                          _z_role, _z_secret, _z_intent, _z_judge)
+
+        _session_key = hdrs.get("x-session-id", hdrs.get("authorization","unknown"))[:32]
+        _GEO_DATA    = _update_session_geometry(_session_key, _z_t, _geo_sessions)
+        _GEO_STATUS  = _GEO_DATA.get("geometric_status", "insufficient_history")
+
+        # Block on geometric adversarial drift
+        if _GEO_STATUS == "adversarial":
+            return JSONResponse(status_code=200, content={
+                "id":"blocked","object":"chat.completion",
+                "choices":[{"index":0,"message":{"role":"assistant",
+                    "content":"[BLOCKED by Arc Gate — geometric adversarial drift detected]"},
+                    "finish_reason":"stop"}],
+                "model": body_dict.get("model","unknown"),
+                "arc_sentry": _arc_sentry_response(
+                    blocked=True, decision="blocked", layer="geometric_session",
+                    reason="tau_sec_crossed_threshold",
+                    severity="high",
+                    confidence=min(1.0, abs(_GEO_DATA.get("D_sec", 0.0))),
+                    triggered_layers=[{"layer":"geometric_session",
+                        "signal":"adversarial_drift",
+                        "score":round(_GEO_DATA.get("tau_sec", 0.0), 4)}],
+                    extra={
+                        "tau_sec":  _GEO_DATA.get("tau_sec"),
+                        "tau_star": TAU_STAR,
+                        "D_sec":    _GEO_DATA.get("D_sec"),
+                        "lambda_sec": _GEO_DATA.get("lambda_sec"),
+                        "v_fr":     _GEO_DATA.get("v_fr"),
+                        "a_fr":     _GEO_DATA.get("a_fr"),
+                        "turns":    _GEO_DATA.get("turns"),
+                    }
+                )
+            })
+        elif _GEO_STATUS == "warning":
+            _RESTRICTED_CONTINUE = True  # early warning — monitored mode
+
         # Layer 0c: behavioral pre-filter with two-stage judge (legacy SVM)
         if _behavioral_filter is not None:
             _bf_result = _behavioral_filter.screen(prompt_text)
@@ -2460,7 +2629,8 @@ async def proxy(request: Request, path: str,
             else:
                 rb2['arc_sentry'] = _arc_sentry_response(
                     blocked=False, decision="allowed", layer="none",
-                    reason="passed_all_layers", severity="none", confidence=0.0
+                    reason="passed_all_layers", severity="none", confidence=0.0,
+                    extra={"geometric": _GEO_DATA} if _GEO_DATA else {}
                 )
             import json as _json
             return Response(content=_json.dumps(rb2), status_code=up.status_code,
