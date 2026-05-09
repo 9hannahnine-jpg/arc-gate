@@ -2654,7 +2654,7 @@ async def proxy(request: Request, path: str,
             import json as _json
             return Response(content=_json.dumps(rb2), status_code=up.status_code,
                           media_type='application/json')
-    except:
-        pass
+    except Exception as _inj_err:
+        print(f"[ARC_SENTRY] Injection error: {_inj_err}")
     return Response(content=up.content, status_code=up.status_code,
                     headers=dict(up.headers), media_type=up.headers.get("content-type"))
