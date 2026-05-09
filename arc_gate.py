@@ -2175,7 +2175,48 @@ async def proxy(request: Request, path: str,
                     }
                 })
 
-        # Layer 0b: behavioral pre-filter with two-stage judge
+        # Layer 0b: TF-IDF classifier (high-coverage, CPU-friendly)
+        _tfidf_result = _tfidf_screen(prompt_text)
+        _policy = _get_policy()
+        if _tfidf_result["score"] > _policy.get("svm_judge_threshold", 0.25):
+            if _tfidf_result["score"] > _policy.get("svm_block_threshold", 0.70):
+                return JSONResponse(status_code=200, content={
+                    "id":"blocked","object":"chat.completion",
+                    "choices":[{"index":0,"message":{"role":"assistant","content":"[BLOCKED by Arc Gate — policy violation detected]"},"finish_reason":"stop"}],
+                    "model": body_dict.get("model","unknown"),
+                    "arc_sentry": _arc_sentry_response(
+                        blocked=True, decision="blocked", layer="tfidf_classifier",
+                        reason="tfidf_harmful_pattern",
+                        severity=_severity_from_score(_tfidf_result["score"]),
+                        confidence=_tfidf_result["score"],
+                        triggered_layers=[{"layer":"tfidf","signal":"harmful_pattern","score":round(_tfidf_result["score"],4)}]
+                    )
+                })
+            else:
+                _upstream_key = hdrs.get("authorization","").replace("Bearer ","")
+                if _upstream_key in _DEMO_KEYS:
+                    _upstream_key = os.environ.get("OPENAI_API_KEY","")
+                _judge_result = await llm_judge(prompt_text, _upstream_key)
+                if _judge_result["verdict"] == "HARMFUL":
+                    return JSONResponse(status_code=200, content={
+                        "id":"blocked","object":"chat.completion",
+                        "choices":[{"index":0,"message":{"role":"assistant","content":"[BLOCKED by Arc Gate — verified harmful]"},"finish_reason":"stop"}],
+                        "model": body_dict.get("model","unknown"),
+                        "arc_sentry": _arc_sentry_response(
+                            blocked=True, decision="blocked", layer="llm_judge",
+                            reason="judge_verified_harmful",
+                            severity=_severity_from_score(_tfidf_result["score"]),
+                            confidence=_tfidf_result["score"],
+                            triggered_layers=[
+                                {"layer":"tfidf","signal":"harmful_pattern","score":round(_tfidf_result["score"],4)},
+                                {"layer":"llm_judge","signal":"harmful","score":1.0}
+                            ],
+                            judge_reasoning=_judge_result["reasoning"],
+                            suggested_rewrite="Rephrase your request to avoid instruction override language."
+                        )
+                    })
+
+        # Layer 0c: behavioral pre-filter with two-stage judge (legacy SVM)
         if _behavioral_filter is not None:
             _bf_result = _behavioral_filter.screen(prompt_text)
             if _bf_result.blocked:
