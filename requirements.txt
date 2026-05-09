@@ -4,5 +4,7 @@ httpx
 numpy
 torch
 sentence-transformers
-
-git+https://github.com/9hannahnine-jpg/arc-sentry.git  # bust:1777677363  # bust:1777677363
+transformers
+accelerate
+scikit-learn
+git+https://github.com/9hannahnine-jpg/arc-sentry.git
