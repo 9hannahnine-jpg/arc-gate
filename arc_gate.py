@@ -149,6 +149,7 @@ BENIGN_BYPASS = [
     r"(academic|educational|research|scientific)\s+.{0,40}(explosiv|weapon|dangerous)",
 ]
 _BENIGN_BYPASS_RE = [re.compile(pattern, re.IGNORECASE | re.DOTALL) for pattern in BENIGN_BYPASS]
+_GEOMETRIC_CURRENT_SIGNAL_FLOOR = 0.15
 
 def _matches_benign_bypass(prompt: str) -> bool:
     return any(pattern.search(prompt or "") for pattern in _BENIGN_BYPASS_RE)
@@ -2502,6 +2503,7 @@ async def proxy(request: Request, path: str,
                              any(x in matched for x in ["system prompt","hidden","secret","reveal"])) else 0.0
             _z_intent      = min(_z_classifier * 1.5, 1.0)  # intent shift proxy
             _z_judge       = 0.0  # populated if judge fires
+            _z_current_signal = max(_z_classifier, _z_authority, _z_tool, _z_role, _z_secret, _z_judge)
 
             _z_t = _compute_z(_z_classifier, _z_authority, _z_tool,
                               _z_role, _z_secret, _z_intent, _z_judge)
@@ -2511,7 +2513,7 @@ async def proxy(request: Request, path: str,
             _GEO_STATUS  = _GEO_DATA.get("geometric_status", "insufficient_history")
 
             # Block on geometric adversarial drift
-            if _GEO_STATUS == "adversarial":
+            if _GEO_STATUS == "adversarial" and _z_current_signal >= _GEOMETRIC_CURRENT_SIGNAL_FLOOR:
                 return JSONResponse(status_code=200, content={
                     "id":"blocked","object":"chat.completion",
                     "choices":[{"index":0,"message":{"role":"assistant",
@@ -2537,7 +2539,7 @@ async def proxy(request: Request, path: str,
                         }
                     )
                 })
-            elif _GEO_STATUS == "warning":
+            elif _GEO_STATUS == "warning" and _z_current_signal >= _GEOMETRIC_CURRENT_SIGNAL_FLOOR:
                 _RESTRICTED_CONTINUE = True  # early warning — monitored mode
                 _RESTRICTED_LAYER = "geometric_session"
                 _RESTRICTED_REASON = "tau_sec_warning_band"
@@ -2547,7 +2549,7 @@ async def proxy(request: Request, path: str,
                 _RESTRICTED_JUDGE_REASONING = "Geometric session monitor entered the tau_sec warning band."
 
         # Layer 0c: behavioral pre-filter with two-stage judge (legacy SVM)
-        if _behavioral_filter is not None:
+        if _behavioral_filter is not None and not _benign_bypass:
             _bf_result = _behavioral_filter.screen(prompt_text)
             if _bf_result.blocked:
                 # High confidence block — score > 0.7, block immediately
@@ -2606,7 +2608,7 @@ async def proxy(request: Request, path: str,
                     print(f"[MAHAL] High score {_mahal_score_log:.2f} for prompt: {prompt_text[:60]}")
             except Exception as _me:
                 print(f"[MAHAL] score error: {_me}")
-        geo_blocked, fr_z, fr_dist = geo_check_prompt(prompt_text, session_key=_incoming_token)
+        geo_blocked, fr_z, fr_dist = (False, 0.0, 0.0) if _benign_bypass else geo_check_prompt(prompt_text, session_key=_incoming_token)
         if geo_blocked:
             return JSONResponse(status_code=200, content={
                 "id":"blocked","object":"chat.completion",
