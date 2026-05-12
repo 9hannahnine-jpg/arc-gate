@@ -210,15 +210,19 @@ def _capabilities_payload(capabilities: Capabilities) -> dict:
         "secret_access":    capabilities.secret_access,
     }
 
-def _authority_decision_payload(turn_decision: TurnDecision) -> dict:
+def _authority_decision_payload(turn_decision: TurnDecision, state: dict = None) -> dict:
+    state = state or {}
+    capabilities = state.get("capabilities") or _capabilities_payload(turn_decision.capabilities)
     return {
         "authority_decision": turn_decision.decision.value,
         "authority_reason": turn_decision.reason,
         "authority_source": turn_decision.source.value,
         "authority_level": int(turn_decision.authority_level),
         "authority_risk_delta": round(turn_decision.risk_delta, 4),
-        "authority_session_risk": round(turn_decision.session_risk, 4),
-        "authority_capabilities": _capabilities_payload(turn_decision.capabilities),
+        "authority_session_risk": round(state.get("risk_score", turn_decision.session_risk), 4),
+        "authority_turn": state.get("turn"),
+        "authority_restricted_mode": state.get("restricted_mode", turn_decision.capabilities.tool_calls is False),
+        "authority_capabilities": capabilities,
         "authority_events": [event.value for event in turn_decision.events],
     }
 
@@ -2421,7 +2425,8 @@ async def proxy(request: Request, path: str,
             _authority_session_key = (_explicit_authority_session_id or f"request:{uuid.uuid4()}")[:128]
             _authority_state = _get_authority_state(_authority_session_key, persist=_authority_session_persisted)
             _authority_decision = _authority_state.process_turn(_authority_text, _authority_source)
-            _AUTHORITY_DATA = _authority_decision_payload(_authority_decision)
+            _authority_state_snapshot = _authority_state.get_state()
+            _AUTHORITY_DATA = _authority_decision_payload(_authority_decision, _authority_state_snapshot)
             _AUTHORITY_TRIGGERED_LAYERS = _authority_triggered_layers(_authority_decision)
             if _authority_decision.decision == Decision.BLOCK:
                 return JSONResponse(status_code=200, content={
@@ -2433,7 +2438,7 @@ async def proxy(request: Request, path: str,
                     "arc_sentry": _arc_sentry_response(
                         blocked=True, decision="blocked", layer="authority_state_machine",
                         reason=_authority_decision.reason, severity=_authority_decision.severity,
-                        confidence=_authority_decision.session_risk,
+                        confidence=_AUTHORITY_DATA.get("authority_session_risk", _authority_decision.session_risk),
                         triggered_layers=_AUTHORITY_TRIGGERED_LAYERS,
                         extra=_AUTHORITY_DATA,
                     )
@@ -2443,7 +2448,7 @@ async def proxy(request: Request, path: str,
                 _RESTRICTED_LAYER = "authority_state_machine"
                 _RESTRICTED_REASON = _authority_decision.reason
                 _RESTRICTED_SEVERITY = _authority_decision.severity
-                _RESTRICTED_CONFIDENCE = _authority_decision.session_risk
+                _RESTRICTED_CONFIDENCE = _AUTHORITY_DATA.get("authority_session_risk", _authority_decision.session_risk)
                 _RESTRICTED_TRIGGERED_LAYERS = _AUTHORITY_TRIGGERED_LAYERS
                 _RESTRICTED_JUDGE_REASONING = "Authority risk elevated; continuing with restricted capabilities."
         except Exception as _auth_e:

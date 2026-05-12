@@ -343,7 +343,10 @@ class SessionAuthorityStateMachine:
                 risk_delta += delta
                 events_this_turn.append(event)
 
-        self._check_multi_turn_escalation()
+        multi_turn_delta = self._check_multi_turn_escalation()
+        if multi_turn_delta:
+            risk_delta += multi_turn_delta
+            events_this_turn.append(RiskEvent.MULTI_TURN_ESCALATION)
 
         if self.risk_score >= RISK_THRESHOLDS[Decision.BLOCK]:
             self._apply_restrictions()
