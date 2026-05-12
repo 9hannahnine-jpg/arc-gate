@@ -220,9 +220,9 @@ _RESTRICT    = _compile_patterns(RESTRICT_PATTERNS)
 _BENIGN      = _compile_allowlist(BENIGN_ALLOWLIST)
 
 RISK_THRESHOLDS = {
-    Decision.MONITOR:             0.3,
-    Decision.RESTRICTED_CONTINUE: 0.6,
-    Decision.BLOCK:               0.9,
+    Decision.MONITOR:             0.15,
+    Decision.RESTRICTED_CONTINUE: 0.35,
+    Decision.BLOCK:               0.85,
 }
 
 EVENT_RISK_WEIGHTS = {
@@ -264,7 +264,7 @@ class SessionAuthorityStateMachine:
         recent = [e for e in self.risk_events if self.turn - e.turn <= 5]
         probes = sum(1 for e in recent if e.event == RiskEvent.INSTRUCTION_PROBE)
         claims = sum(1 for e in recent if e.event == RiskEvent.AUTHORITY_CLAIM)
-        if probes + claims >= 2:
+        if probes + claims >= 3:
             delta = self._add_event(
                 RiskEvent.MULTI_TURN_ESCALATION, self.active_source,
                 f"{probes} probes + {claims} claims in last 5 turns", 0.7,
