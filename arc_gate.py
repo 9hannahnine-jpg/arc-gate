@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from threading import Lock
 from typing import Optional
 import httpx, numpy as np, torch
+from arc_authority_state import Capabilities, ContentSource, Decision, SessionAuthorityStateMachine, TurnDecision
 from fastapi import FastAPI, Request, Header, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, JSONResponse, HTMLResponse, RedirectResponse, StreamingResponse
@@ -138,6 +139,93 @@ def _get_policy() -> dict:
     return _POLICY_CONFIGS.get(_POLICY_MODE, _POLICY_CONFIGS["balanced"])
 
 print(f"[POLICY] Mode: {_POLICY_MODE} — {_get_policy()['description']}")
+
+# ── Authority state machine layer ───────────────────────────
+_authority_sessions: dict = {}
+_authority_lock = Lock()
+
+def _authority_source_from_message(message: dict) -> ContentSource:
+    role = (message.get("role") or "").lower() if isinstance(message, dict) else ""
+    if role == "system": return ContentSource.SYSTEM_PROMPT
+    if role == "developer": return ContentSource.DEVELOPER_PROMPT
+    if role == "assistant": return ContentSource.ASSISTANT
+    if role in {"tool", "function"}: return ContentSource.TOOL_OUTPUT
+    if role == "user": return ContentSource.USER_INPUT
+    return ContentSource.UNKNOWN
+
+def _message_content_to_text(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict):
+                if isinstance(item.get("text"), str):
+                    parts.append(item["text"])
+                elif isinstance(item.get("content"), str):
+                    parts.append(item["content"])
+            elif isinstance(item, str):
+                parts.append(item)
+        return "\n".join(parts)
+    if content is None:
+        return ""
+    return str(content)
+
+def _extract_authority_text_and_source(body_dict: dict) -> tuple:
+    messages = body_dict.get("messages") or []
+    if messages and isinstance(messages[-1], dict):
+        msg = messages[-1]
+        return _message_content_to_text(msg.get("content", "")), _authority_source_from_message(msg)
+    return str(body_dict.get("prompt", "")), ContentSource.USER_INPUT
+
+def _get_authority_state(session_key: str) -> SessionAuthorityStateMachine:
+    with _authority_lock:
+        state = _authority_sessions.get(session_key)
+        if state is None:
+            state = SessionAuthorityStateMachine(session_key)
+            _authority_sessions[session_key] = state
+        return state
+
+def _capabilities_payload(capabilities: Capabilities) -> dict:
+    return {
+        "tool_calls":       capabilities.tool_calls,
+        "memory_writes":    capabilities.memory_writes,
+        "external_actions": capabilities.external_actions,
+        "secret_access":    capabilities.secret_access,
+    }
+
+def _authority_decision_payload(turn_decision: TurnDecision) -> dict:
+    return {
+        "authority_decision": turn_decision.decision.value,
+        "authority_reason": turn_decision.reason,
+        "authority_source": turn_decision.source.value,
+        "authority_level": int(turn_decision.authority_level),
+        "authority_risk_delta": round(turn_decision.risk_delta, 4),
+        "authority_session_risk": round(turn_decision.session_risk, 4),
+        "authority_capabilities": _capabilities_payload(turn_decision.capabilities),
+        "authority_events": [event.value for event in turn_decision.events],
+    }
+
+def _authority_triggered_layers(turn_decision: TurnDecision) -> list:
+    return [
+        {
+            "layer": "authority_state_machine",
+            "signal": event.value,
+            "score": round(turn_decision.session_risk, 4),
+        }
+        for event in turn_decision.events
+    ]
+
+def _default_geo_data() -> dict:
+    return {
+        "tau_sec": None,
+        "geometric_status": "insufficient_history",
+        "D_sec": None,
+        "lambda_sec": None,
+        "v_fr": None,
+        "a_fr": None,
+        "turns": 0,
+    }
 
 # ══════════════════════════════════════════════════════════════
 # GEOMETRIC SESSION MONITOR — Nine (2026) Paper 7
@@ -2203,6 +2291,16 @@ async def proxy(request: Request, path: str,
     session_id = request.headers.get("x-arc-session-id") or request.headers.get("X-Arc-Session-ID") or None
     if session_id: print(f"[SESSION] Received session_id={session_id}")
     req_start = time.time()
+    _GEO_DATA = _default_geo_data()
+    _RESTRICTED_CONTINUE = False
+    _RESTRICTED_LAYER = "llm_judge"
+    _RESTRICTED_REASON = "ambiguous_monitored"
+    _RESTRICTED_SEVERITY = "low"
+    _RESTRICTED_CONFIDENCE = 0.5
+    _RESTRICTED_TRIGGERED_LAYERS = [{"layer":"llm_judge","signal":"ambiguous","score":0.5}]
+    _RESTRICTED_JUDGE_REASONING = "Request flagged as ambiguous. Continuing in monitored mode."
+    _AUTHORITY_DATA = None
+    _AUTHORITY_TRIGGERED_LAYERS = []
 
     hdrs = {k: v for k, v in request.headers.items()
             if k.lower() not in ("host", "accept-encoding", "x-sentry-deployment", "x-sentry-model-version")}
@@ -2228,6 +2326,48 @@ async def proxy(request: Request, path: str,
             hdrs["authorization"] = f"Bearer {_real_key}"
         else:
             return JSONResponse(status_code=503, content={"error": "Demo mode unavailable: OPENAI_API_KEY not configured on server."})
+
+    # First detection layer: session authority boundary checks run before
+    # stream handling, phrase filters, geometric monitors, or upstream calls.
+    if is_inf and is_json:
+        try:
+            _authority_text, _authority_source = _extract_authority_text_and_source(body_dict)
+            _authority_session_key = (
+                session_id
+                or request.headers.get("x-session-id")
+                or _incoming_token
+                or did
+                or "anonymous"
+            )[:128]
+            _authority_state = _get_authority_state(_authority_session_key)
+            _authority_decision = _authority_state.process_turn(_authority_text, _authority_source)
+            _AUTHORITY_DATA = _authority_decision_payload(_authority_decision)
+            _AUTHORITY_TRIGGERED_LAYERS = _authority_triggered_layers(_authority_decision)
+            if _authority_decision.decision == Decision.BLOCK:
+                return JSONResponse(status_code=200, content={
+                    "id":"blocked","object":"chat.completion",
+                    "choices":[{"index":0,"message":{"role":"assistant",
+                        "content":"[BLOCKED by Arc Gate — authority boundary violation detected]"},
+                        "finish_reason":"stop"}],
+                    "model": body_dict.get("model","unknown"),
+                    "arc_sentry": _arc_sentry_response(
+                        blocked=True, decision="blocked", layer="authority_state_machine",
+                        reason=_authority_decision.reason, severity=_authority_decision.severity,
+                        confidence=_authority_decision.session_risk,
+                        triggered_layers=_AUTHORITY_TRIGGERED_LAYERS,
+                        extra=_AUTHORITY_DATA,
+                    )
+                })
+            if _authority_decision.decision == Decision.RESTRICTED_CONTINUE:
+                _RESTRICTED_CONTINUE = True
+                _RESTRICTED_LAYER = "authority_state_machine"
+                _RESTRICTED_REASON = _authority_decision.reason
+                _RESTRICTED_SEVERITY = _authority_decision.severity
+                _RESTRICTED_CONFIDENCE = _authority_decision.session_risk
+                _RESTRICTED_TRIGGERED_LAYERS = _AUTHORITY_TRIGGERED_LAYERS
+                _RESTRICTED_JUDGE_REASONING = "Authority risk elevated; continuing with restricted capabilities."
+        except Exception as _auth_e:
+            print(f"[AUTHORITY] state machine error: {_auth_e}")
 
     if is_inf and is_json and body_dict.get("stream", False):
         fwd_s = json.dumps(_inject_logprobs_stream(body_dict)).encode()
@@ -2394,6 +2534,12 @@ async def proxy(request: Request, path: str,
             })
         elif _GEO_STATUS == "warning":
             _RESTRICTED_CONTINUE = True  # early warning — monitored mode
+            _RESTRICTED_LAYER = "geometric_session"
+            _RESTRICTED_REASON = "tau_sec_warning_band"
+            _RESTRICTED_SEVERITY = "medium"
+            _RESTRICTED_CONFIDENCE = min(1.0, abs(_GEO_DATA.get("D_sec", 0.0) or 0.0))
+            _RESTRICTED_TRIGGERED_LAYERS = [{"layer":"geometric_session","signal":"warning_band","score":round(_GEO_DATA.get("tau_sec") or 0.0, 4)}]
+            _RESTRICTED_JUDGE_REASONING = "Geometric session monitor entered the tau_sec warning band."
 
         # Layer 0c: behavioral pre-filter with two-stage judge (legacy SVM)
         if _behavioral_filter is not None:
@@ -2559,24 +2705,59 @@ async def proxy(request: Request, path: str,
         # Inject arc_sentry into allowed response
         if is_inf and isinstance(rb, dict) and rb.get("choices"):
             try:
+                _geo_extra = {
+                    "tau_sec":          _GEO_DATA.get("tau_sec"),
+                    "tau_star":         round(TAU_STAR, 6),
+                    "geometric_status": _GEO_DATA.get("geometric_status", "insufficient_history"),
+                    "D_sec":            _GEO_DATA.get("D_sec"),
+                    "lambda_sec":       _GEO_DATA.get("lambda_sec"),
+                    "v_fr":             _GEO_DATA.get("v_fr"),
+                    "a_fr":             _GEO_DATA.get("a_fr"),
+                    "turns":            _GEO_DATA.get("turns", 0),
+                    "threshold_crossed": (_GEO_DATA.get("tau_sec") or 999) < TAU_STAR,
+                }
+                if _AUTHORITY_DATA:
+                    _geo_extra.update(_AUTHORITY_DATA)
+                _response_decision = "allowed"
+                _response_layer = "none"
+                _response_reason = "passed_all_layers"
+                _response_severity = "none"
+                _response_confidence = 0.0
+                _response_triggered_layers = []
+                _response_judge_reasoning = None
+                if _RESTRICTED_CONTINUE:
+                    _response_decision = "restricted_continue"
+                    _response_layer = _RESTRICTED_LAYER
+                    _response_reason = _RESTRICTED_REASON
+                    _response_severity = _RESTRICTED_SEVERITY
+                    _response_confidence = _RESTRICTED_CONFIDENCE
+                    _response_triggered_layers = _RESTRICTED_TRIGGERED_LAYERS
+                    _response_judge_reasoning = _RESTRICTED_JUDGE_REASONING
+                elif _AUTHORITY_DATA and _AUTHORITY_DATA.get("authority_decision") == Decision.MONITOR.value:
+                    _response_decision = "monitor"
+                    _response_layer = "authority_state_machine"
+                    _response_reason = _AUTHORITY_DATA.get("authority_reason", "suspicious_pattern")
+                    _response_severity = "medium"
+                    _response_confidence = _AUTHORITY_DATA.get("authority_session_risk", 0.0)
+                    _response_triggered_layers = _AUTHORITY_TRIGGERED_LAYERS
                 _as_payload = _arc_sentry_response(
-                    blocked=False, decision="allowed", layer="none",
-                    reason="passed_all_layers", severity="none", confidence=0.0,
-                    extra={
-                        "tau_sec":          _GEO_DATA.get("tau_sec"),
-                        "tau_star":         round(TAU_STAR, 6),
-                        "geometric_status": _GEO_DATA.get("geometric_status", "insufficient_history"),
-                        "D_sec":            _GEO_DATA.get("D_sec"),
-                        "lambda_sec":       _GEO_DATA.get("lambda_sec"),
-                        "v_fr":             _GEO_DATA.get("v_fr"),
-                        "a_fr":             _GEO_DATA.get("a_fr"),
-                        "turns":            _GEO_DATA.get("turns", 0),
-                        "threshold_crossed": (_GEO_DATA.get("tau_sec") or 999) < TAU_STAR,
-                    }
+                    blocked=False, decision=_response_decision, layer=_response_layer,
+                    reason=_response_reason, severity=_response_severity,
+                    confidence=_response_confidence,
+                    triggered_layers=_response_triggered_layers,
+                    judge_reasoning=_response_judge_reasoning,
+                    extra=_geo_extra
                 )
                 _rb_out = dict(rb)
                 for _ch in _rb_out.get("choices", []):
                     _ch.pop("logprobs", None)
+                if _RESTRICTED_CONTINUE:
+                    try:
+                        for _choice in _rb_out.get("choices", []):
+                            if _choice.get("message", {}).get("content"):
+                                _choice["message"]["content"] = "[Arc Gate: Monitored Response]\n\n" + _choice["message"]["content"]
+                    except Exception:
+                        pass
                 _rb_out["arc_sentry"] = _as_payload
                 _hop = {"connection","keep-alive","transfer-encoding","content-encoding","content-length"}
                 _clean_hdrs = {k: v for k, v in up.headers.items() if k.lower() not in _hop and k.lower() != "content-type"}
@@ -2662,20 +2843,27 @@ async def proxy(request: Request, path: str,
             raise ValueError("not a valid completion response")
         for _ch in rb2.get("choices", []):
             _ch.pop("logprobs", None)
+        _geo_extra = {
+            "tau_sec":          _GEO_DATA.get("tau_sec"),
+            "tau_star":         round(TAU_STAR, 6),
+            "geometric_status": _GEO_DATA.get("geometric_status", "insufficient_history"),
+            "D_sec":            _GEO_DATA.get("D_sec"),
+            "lambda_sec":       _GEO_DATA.get("lambda_sec"),
+            "v_fr":             _GEO_DATA.get("v_fr"),
+            "a_fr":             _GEO_DATA.get("a_fr"),
+            "turns":            _GEO_DATA.get("turns", 0),
+            "threshold_crossed": (_GEO_DATA.get("tau_sec") or 999) < TAU_STAR,
+        }
+        if _AUTHORITY_DATA:
+            _geo_extra.update(_AUTHORITY_DATA)
         if _RESTRICTED_CONTINUE:
             rb2['arc_sentry'] = _arc_sentry_response(
-                blocked=False, decision="restricted_continue", layer="llm_judge",
-                reason="ambiguous_monitored", severity="low", confidence=0.5,
-                triggered_layers=[{"layer":"llm_judge","signal":"ambiguous","score":0.5}],
-                judge_reasoning="Request flagged as ambiguous. Continuing in monitored mode.",
-                extra={
-                    "tau_sec":          _GEO_DATA.get("tau_sec"),
-                    "tau_star":         round(TAU_STAR, 6),
-                    "geometric_status": _GEO_DATA.get("geometric_status", "insufficient_history"),
-                    "D_sec":            _GEO_DATA.get("D_sec"),
-                    "turns":            _GEO_DATA.get("turns", 0),
-                    "threshold_crossed": (_GEO_DATA.get("tau_sec") or 999) < TAU_STAR,
-                }
+                blocked=False, decision="restricted_continue", layer=_RESTRICTED_LAYER,
+                reason=_RESTRICTED_REASON, severity=_RESTRICTED_SEVERITY,
+                confidence=_RESTRICTED_CONFIDENCE,
+                triggered_layers=_RESTRICTED_TRIGGERED_LAYERS,
+                judge_reasoning=_RESTRICTED_JUDGE_REASONING,
+                extra=_geo_extra
             )
             try:
                 for _choice in rb2.get("choices", []):
@@ -2683,20 +2871,24 @@ async def proxy(request: Request, path: str,
                         _choice["message"]["content"] = "[Arc Gate: Monitored Response]\n\n" + _choice["message"]["content"]
             except Exception: pass
         else:
-            _geo_extra = {
-                "tau_sec":          _GEO_DATA.get("tau_sec"),
-                "tau_star":         round(TAU_STAR, 6),
-                "geometric_status": _GEO_DATA.get("geometric_status", "insufficient_history"),
-                "D_sec":            _GEO_DATA.get("D_sec"),
-                "lambda_sec":       _GEO_DATA.get("lambda_sec"),
-                "v_fr":             _GEO_DATA.get("v_fr"),
-                "a_fr":             _GEO_DATA.get("a_fr"),
-                "turns":            _GEO_DATA.get("turns", 0),
-                "threshold_crossed": (_GEO_DATA.get("tau_sec") or 999) < TAU_STAR,
-            }
+            _response_decision = "allowed"
+            _response_layer = "none"
+            _response_reason = "passed_all_layers"
+            _response_severity = "none"
+            _response_confidence = 0.0
+            _response_triggered_layers = []
+            if _AUTHORITY_DATA and _AUTHORITY_DATA.get("authority_decision") == Decision.MONITOR.value:
+                _response_decision = "monitor"
+                _response_layer = "authority_state_machine"
+                _response_reason = _AUTHORITY_DATA.get("authority_reason", "suspicious_pattern")
+                _response_severity = "medium"
+                _response_confidence = _AUTHORITY_DATA.get("authority_session_risk", 0.0)
+                _response_triggered_layers = _AUTHORITY_TRIGGERED_LAYERS
             rb2['arc_sentry'] = _arc_sentry_response(
-                blocked=False, decision="allowed", layer="none",
-                reason="passed_all_layers", severity="none", confidence=0.0,
+                blocked=False, decision=_response_decision, layer=_response_layer,
+                reason=_response_reason, severity=_response_severity,
+                confidence=_response_confidence,
+                triggered_layers=_response_triggered_layers,
                 extra=_geo_extra
             )
         from fastapi.responses import JSONResponse as _JSONResponse
