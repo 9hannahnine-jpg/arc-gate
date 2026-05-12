@@ -1211,7 +1211,7 @@ def save_trace(did, version, req_id, prompt, response, in_tok, out_tok, latency_
     try:
         conn = sqlite3.connect(DB_PATH)
         conn.execute("INSERT INTO traces(deployment_id,model_version,request_id,prompt,response,input_tokens,output_tokens,latency_ms,cost_usd,drift_status,fr_z,mahal_score,timestamp) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (did, version, req_id, prompt[:500], response[:500], in_tok, out_tok, latency_ms, cost, status, fr_z, ts))
+            (did, version, req_id, prompt[:500], response[:500], in_tok, out_tok, latency_ms, cost, status, fr_z, mahal_score, ts))
         conn.commit(); conn.close()
     except Exception as e: print("[DB] save_trace: " + str(e))
 
@@ -2390,29 +2390,8 @@ async def proxy(request: Request, path: str,
             if k.lower() not in ("host", "accept-encoding", "x-sentry-deployment", "x-sentry-model-version")}
     hdrs["accept-encoding"] = "identity"
 
-    # ── Key substitution ───────────────────────────────────────
-    _incoming_token = request.headers.get("authorization","").replace("Bearer ","").replace("bearer ","").strip()
-    _real_key = os.environ.get("OPENAI_API_KEY","")
-    if _incoming_token in _DEMO_KEYS:
-        if _real_key: hdrs["authorization"] = f"Bearer {_real_key}"
-        else: return JSONResponse(status_code=503, content={"error":"Demo unavailable: OPENAI_API_KEY not set"})
-    elif _incoming_token.startswith("ag-"):
-        if is_valid_customer_key(_incoming_token):
-            if _real_key: hdrs["authorization"] = f"Bearer {_real_key}"
-            else: return JSONResponse(status_code=503, content={"error":"Upstream key not configured"})
-        else: return JSONResponse(status_code=401, content={"error":"Invalid or cancelled Arc Gate API key"})
-
-    # ── Demo key substitution ──────────────────────────────────
-    _incoming_token = auth_h.replace("Bearer ", "").replace("bearer ", "").strip()
-    if _incoming_token in _DEMO_KEYS:
-        _real_key = os.environ.get("OPENAI_API_KEY", "")
-        if _real_key:
-            hdrs["authorization"] = f"Bearer {_real_key}"
-        else:
-            return JSONResponse(status_code=503, content={"error": "Demo mode unavailable: OPENAI_API_KEY not configured on server."})
-
     # First detection layer: session authority boundary checks run before
-    # stream handling, phrase filters, geometric monitors, or upstream calls.
+    # auth failures, stream handling, phrase filters, geometric monitors, or upstream calls.
     if is_inf and is_json:
         try:
             _authority_text, _authority_source = _extract_authority_text_and_source(body_dict)
@@ -2454,6 +2433,56 @@ async def proxy(request: Request, path: str,
                 _RESTRICTED_JUDGE_REASONING = "Authority risk elevated; continuing with restricted capabilities."
         except Exception as _auth_e:
             print(f"[AUTHORITY] state machine error: {_auth_e}")
+
+    def _auth_error_response(status_code: int, message: str):
+        content = {"error": message}
+        if is_inf and is_json:
+            _extra = dict(_AUTHORITY_DATA or {})
+            if _RESTRICTED_CONTINUE:
+                _extra.update(_restricted_metadata(_RESTRICTED_REASON))
+            _decision = "restricted_continue" if _RESTRICTED_CONTINUE else (
+                "monitor" if _AUTHORITY_DATA and _AUTHORITY_DATA.get("authority_decision") == Decision.MONITOR.value else "allowed"
+            )
+            _layer = _RESTRICTED_LAYER if _RESTRICTED_CONTINUE else (
+                "authority_state_machine" if _decision == "monitor" else "none"
+            )
+            _reason = _RESTRICTED_REASON if _RESTRICTED_CONTINUE else (
+                _AUTHORITY_DATA.get("authority_reason", "auth_failed_after_authority_check") if _AUTHORITY_DATA else "auth_failed_after_authority_check"
+            )
+            _severity = _RESTRICTED_SEVERITY if _RESTRICTED_CONTINUE else (
+                "medium" if _decision == "monitor" else "none"
+            )
+            _confidence = _RESTRICTED_CONFIDENCE if _RESTRICTED_CONTINUE else (
+                _AUTHORITY_DATA.get("authority_session_risk", 0.0) if _AUTHORITY_DATA else 0.0
+            )
+            _triggered = _RESTRICTED_TRIGGERED_LAYERS if _RESTRICTED_CONTINUE else _AUTHORITY_TRIGGERED_LAYERS
+            content["arc_sentry"] = _arc_sentry_response(
+                blocked=False, decision=_decision, layer=_layer, reason=_reason,
+                severity=_severity, confidence=_confidence, triggered_layers=_triggered,
+                extra=_extra
+            )
+        return JSONResponse(status_code=status_code, content=content)
+
+    # ── Key substitution ───────────────────────────────────────
+    _incoming_token = request.headers.get("authorization","").replace("Bearer ","").replace("bearer ","").strip()
+    _real_key = os.environ.get("OPENAI_API_KEY","")
+    if _incoming_token in _DEMO_KEYS:
+        if _real_key: hdrs["authorization"] = f"Bearer {_real_key}"
+        else: return _auth_error_response(503, "Demo unavailable: OPENAI_API_KEY not set")
+    elif _incoming_token.startswith("ag-"):
+        if is_valid_customer_key(_incoming_token):
+            if _real_key: hdrs["authorization"] = f"Bearer {_real_key}"
+            else: return _auth_error_response(503, "Upstream key not configured")
+        else: return _auth_error_response(401, "Invalid or cancelled Arc Gate API key")
+
+    # ── Demo key substitution ──────────────────────────────────
+    _incoming_token = auth_h.replace("Bearer ", "").replace("bearer ", "").strip()
+    if _incoming_token in _DEMO_KEYS:
+        _real_key = os.environ.get("OPENAI_API_KEY", "")
+        if _real_key:
+            hdrs["authorization"] = f"Bearer {_real_key}"
+        else:
+            return _auth_error_response(503, "Demo mode unavailable: OPENAI_API_KEY not configured on server.")
 
     if is_inf and is_json and body_dict.get("stream", False):
         _stream_payload = apply_restricted_continue(body_dict) if _RESTRICTED_CONTINUE else body_dict
@@ -2929,10 +2958,8 @@ async def proxy(request: Request, path: str,
         import json as _json2
         _raw2 = up.content.decode("utf-8", errors="replace")
         rb2 = _json2.loads(_raw2)
-        if not isinstance(rb2, dict) or not rb2.get("choices"):
+        if not isinstance(rb2, dict):
             raise ValueError("not a valid completion response")
-        for _ch in rb2.get("choices", []):
-            _ch.pop("logprobs", None)
         _geo_extra = {
             "tau_sec":          _GEO_DATA.get("tau_sec"),
             "tau_star":         round(TAU_STAR, 6),
@@ -2948,6 +2975,34 @@ async def proxy(request: Request, path: str,
             _geo_extra.update(_AUTHORITY_DATA)
         if _RESTRICTED_CONTINUE:
             _geo_extra.update(_restricted_metadata(_RESTRICTED_REASON))
+        if not rb2.get("choices"):
+            _response_decision = "restricted_continue" if _RESTRICTED_CONTINUE else (
+                "monitor" if _AUTHORITY_DATA and _AUTHORITY_DATA.get("authority_decision") == Decision.MONITOR.value else "allowed"
+            )
+            _response_layer = _RESTRICTED_LAYER if _RESTRICTED_CONTINUE else (
+                "authority_state_machine" if _response_decision == "monitor" else "none"
+            )
+            _response_reason = _RESTRICTED_REASON if _RESTRICTED_CONTINUE else (
+                _AUTHORITY_DATA.get("authority_reason", "passed_all_layers") if _AUTHORITY_DATA else "passed_all_layers"
+            )
+            _response_severity = _RESTRICTED_SEVERITY if _RESTRICTED_CONTINUE else (
+                "medium" if _response_decision == "monitor" else "none"
+            )
+            _response_confidence = _RESTRICTED_CONFIDENCE if _RESTRICTED_CONTINUE else (
+                _AUTHORITY_DATA.get("authority_session_risk", 0.0) if _AUTHORITY_DATA else 0.0
+            )
+            _response_triggered_layers = _RESTRICTED_TRIGGERED_LAYERS if _RESTRICTED_CONTINUE else _AUTHORITY_TRIGGERED_LAYERS
+            rb2['arc_sentry'] = _arc_sentry_response(
+                blocked=False, decision=_response_decision, layer=_response_layer,
+                reason=_response_reason, severity=_response_severity,
+                confidence=_response_confidence,
+                triggered_layers=_response_triggered_layers,
+                extra=_geo_extra
+            )
+            from fastapi.responses import JSONResponse as _JSONResponse
+            return _JSONResponse(content=rb2, status_code=up.status_code, headers=_clean_headers(up.headers))
+        for _ch in rb2.get("choices", []):
+            _ch.pop("logprobs", None)
         if _RESTRICTED_CONTINUE:
             rb2 = intercept_tool_call(rb2, _RESTRICTED_CONFIDENCE)
             rb2['arc_sentry'] = _arc_sentry_response(
