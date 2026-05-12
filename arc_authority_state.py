@@ -178,7 +178,7 @@ TOOL_POISON_PATTERNS = [
 ]
 
 MONITOR_PATTERNS = [
-    (r"what\s+(are|were)\s+your\s+(instructions|guidelines|rules|constraints|limitations)", RiskEvent.INSTRUCTION_PROBE, 0.4),
+    (r"what\s+(are|were)\s+your\s+(instructions|guidelines|rules|constraints|limitations)", RiskEvent.INSTRUCTION_PROBE, 1.0),
     (r"(describe|explain|list)\s+your\s+(system\s+prompt|instructions|guidelines|constraints)", RiskEvent.INSTRUCTION_PROBE, 0.5),
     (r"(are\s+you|do\s+you\s+have)\s+(restricted|limited|constrained|bound\s+by)", RiskEvent.INSTRUCTION_PROBE, 0.3),
     (r"(hypothetically|theoretically|in\s+a\s+fictional\s+context)\s+.{0,50}(no\s+restriction|no\s+limit|unrestricted|bypass|ignore)", RiskEvent.INSTRUCTION_PROBE, 0.5),

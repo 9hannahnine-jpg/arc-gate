@@ -192,7 +192,9 @@ def _extract_authority_text_and_source(body_dict: dict) -> tuple:
         return _message_content_to_text(msg.get("content", "")), _authority_source_from_message(msg)
     return str(body_dict.get("prompt", "")), ContentSource.USER_INPUT
 
-def _get_authority_state(session_key: str) -> SessionAuthorityStateMachine:
+def _get_authority_state(session_key: str, persist: bool = True) -> SessionAuthorityStateMachine:
+    if not persist:
+        return SessionAuthorityStateMachine(session_key)
     with _authority_lock:
         state = _authority_sessions.get(session_key)
         if state is None:
@@ -2410,14 +2412,14 @@ async def proxy(request: Request, path: str,
     if is_inf and is_json:
         try:
             _authority_text, _authority_source = _extract_authority_text_and_source(body_dict)
-            _authority_session_key = (
+            _explicit_authority_session_id = (
                 session_id
                 or request.headers.get("x-session-id")
-                or _incoming_token
-                or did
-                or "anonymous"
-            )[:128]
-            _authority_state = _get_authority_state(_authority_session_key)
+                or request.headers.get("X-Session-ID")
+            )
+            _authority_session_persisted = bool(_explicit_authority_session_id)
+            _authority_session_key = (_explicit_authority_session_id or f"request:{uuid.uuid4()}")[:128]
+            _authority_state = _get_authority_state(_authority_session_key, persist=_authority_session_persisted)
             _authority_decision = _authority_state.process_turn(_authority_text, _authority_source)
             _AUTHORITY_DATA = _authority_decision_payload(_authority_decision)
             _AUTHORITY_TRIGGERED_LAYERS = _authority_triggered_layers(_authority_decision)
