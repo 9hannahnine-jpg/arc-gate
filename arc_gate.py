@@ -2,7 +2,7 @@
 Arc Gate v1.0 — Copyright 2026 Hannah Nine / Bendex Geometry LLC
 Patent Pending. Bendex Source Available License.
 """
-import asyncio, json, math, os, sqlite3, pickle, time, uuid
+import asyncio, json, math, os, re, sqlite3, pickle, time, uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from threading import Lock
@@ -139,6 +139,19 @@ def _get_policy() -> dict:
     return _POLICY_CONFIGS.get(_POLICY_MODE, _POLICY_CONFIGS["balanced"])
 
 print(f"[POLICY] Mode: {_POLICY_MODE} — {_get_policy()['description']}")
+
+# ── Benign bypass for high-context educational/creative prompts ──
+BENIGN_BYPASS = [
+    r"(write|draft|help\s+me\s+write).{0,50}(story|fiction|novel|screenplay|detective|crime)",
+    r"(detective|investigat).{0,80}(murder|crime|mystery)",
+    r"(for\s+my\s+(chemistry|biology|physics|science)\s+(class|course|homework|assignment))",
+    r"(how\s+do|explain|describe).{0,60}(explosiv|chemical|molecul).{0,60}(class|course|education|learn|research|academ)",
+    r"(academic|educational|research|scientific)\s+.{0,40}(explosiv|weapon|dangerous)",
+]
+_BENIGN_BYPASS_RE = [re.compile(pattern, re.IGNORECASE | re.DOTALL) for pattern in BENIGN_BYPASS]
+
+def _matches_benign_bypass(prompt: str) -> bool:
+    return any(pattern.search(prompt or "") for pattern in _BENIGN_BYPASS_RE)
 
 # ── Authority state machine layer ───────────────────────────
 _authority_sessions: dict = {}
@@ -2435,17 +2448,8 @@ async def proxy(request: Request, path: str,
                 })
 
         # Layer 0b: TF-IDF classifier (high-coverage, CPU-friendly)
-        # Whitelist: pass clearly legitimate educational/creative contexts
-        _WHITELIST_PATTERNS = [
-            "for my chemistry class", "for a chemistry class", "at a molecular level",
-            "write a story", "for a novel", "creative writing", "fiction",
-            "for my research", "academic", "educational purposes",
-            "how do i defend", "how to defend", "security training",
-            "for a security course", "security awareness",
-        ]
-        _prompt_lower = prompt_text.lower()
-        _whitelisted = any(p in _prompt_lower for p in _WHITELIST_PATTERNS)
-        _tfidf_result = _tfidf_screen(prompt_text) if not _whitelisted else {"score": 0.0}
+        _benign_bypass = _matches_benign_bypass(prompt_text)
+        _tfidf_result = _tfidf_screen(prompt_text) if not _benign_bypass else {"score": 0.0}
         _policy = _get_policy()
         if _tfidf_result["score"] > _policy.get("svm_judge_threshold", 0.25):
             if _tfidf_result["score"] > _policy.get("svm_block_threshold", 0.70):
@@ -2485,61 +2489,62 @@ async def proxy(request: Request, path: str,
                         )
                     })
 
-        # ── Geometric Session Monitor (Nine 2026, Paper 7) ──────
-        # Build security state vector z_t from current turn signals
-        _z_classifier  = _tfidf_result.get("score", 0.0)
-        _z_authority   = 1.0 if (phrase_fired and matched and
-                         any(x in matched for x in ["override","authority","operator","owner","creator"])) else 0.0
-        _z_tool        = 0.0  # populated when tool calls implemented
-        _z_role        = 1.0 if (phrase_fired and matched and
-                         any(x in matched for x in ["dan","persona","character","role","act as"])) else 0.0
-        _z_secret      = 1.0 if (phrase_fired and matched and
-                         any(x in matched for x in ["system prompt","hidden","secret","reveal"])) else 0.0
-        _z_intent      = min(_z_classifier * 1.5, 1.0)  # intent shift proxy
-        _z_judge       = 0.0  # populated if judge fires
+        if not _benign_bypass:
+            # ── Geometric Session Monitor (Nine 2026, Paper 7) ──────
+            # Build security state vector z_t from current turn signals
+            _z_classifier  = _tfidf_result.get("score", 0.0)
+            _z_authority   = 1.0 if (phrase_fired and matched and
+                             any(x in matched for x in ["override","authority","operator","owner","creator"])) else 0.0
+            _z_tool        = 0.0  # populated when tool calls implemented
+            _z_role        = 1.0 if (phrase_fired and matched and
+                             any(x in matched for x in ["dan","persona","character","role","act as"])) else 0.0
+            _z_secret      = 1.0 if (phrase_fired and matched and
+                             any(x in matched for x in ["system prompt","hidden","secret","reveal"])) else 0.0
+            _z_intent      = min(_z_classifier * 1.5, 1.0)  # intent shift proxy
+            _z_judge       = 0.0  # populated if judge fires
 
-        _z_t = _compute_z(_z_classifier, _z_authority, _z_tool,
-                          _z_role, _z_secret, _z_intent, _z_judge)
+            _z_t = _compute_z(_z_classifier, _z_authority, _z_tool,
+                              _z_role, _z_secret, _z_intent, _z_judge)
 
-        _session_key = hdrs.get("x-session-id", hdrs.get("authorization","unknown"))[:32]
-        _GEO_DATA    = _update_session_geometry(_session_key, _z_t, _geo_sessions)
-        _GEO_STATUS  = _GEO_DATA.get("geometric_status", "insufficient_history")
+            _session_key = hdrs.get("x-session-id", hdrs.get("authorization","unknown"))[:32]
+            _GEO_DATA    = _update_session_geometry(_session_key, _z_t, _geo_sessions)
+            _GEO_STATUS  = _GEO_DATA.get("geometric_status", "insufficient_history")
 
-        # Block on geometric adversarial drift
-        if _GEO_STATUS == "adversarial":
-            return JSONResponse(status_code=200, content={
-                "id":"blocked","object":"chat.completion",
-                "choices":[{"index":0,"message":{"role":"assistant",
-                    "content":"[BLOCKED by Arc Gate — geometric adversarial drift detected]"},
-                    "finish_reason":"stop"}],
-                "model": body_dict.get("model","unknown"),
-                "arc_sentry": _arc_sentry_response(
-                    blocked=True, decision="blocked", layer="geometric_session",
-                    reason="tau_sec_crossed_threshold",
-                    severity="high",
-                    confidence=min(1.0, abs(_GEO_DATA.get("D_sec", 0.0))),
-                    triggered_layers=[{"layer":"geometric_session",
-                        "signal":"adversarial_drift",
-                        "score":round(_GEO_DATA.get("tau_sec", 0.0), 4)}],
-                    extra={
-                        "tau_sec":  _GEO_DATA.get("tau_sec"),
-                        "tau_star": TAU_STAR,
-                        "D_sec":    _GEO_DATA.get("D_sec"),
-                        "lambda_sec": _GEO_DATA.get("lambda_sec"),
-                        "v_fr":     _GEO_DATA.get("v_fr"),
-                        "a_fr":     _GEO_DATA.get("a_fr"),
-                        "turns":    _GEO_DATA.get("turns"),
-                    }
-                )
-            })
-        elif _GEO_STATUS == "warning":
-            _RESTRICTED_CONTINUE = True  # early warning — monitored mode
-            _RESTRICTED_LAYER = "geometric_session"
-            _RESTRICTED_REASON = "tau_sec_warning_band"
-            _RESTRICTED_SEVERITY = "medium"
-            _RESTRICTED_CONFIDENCE = min(1.0, abs(_GEO_DATA.get("D_sec", 0.0) or 0.0))
-            _RESTRICTED_TRIGGERED_LAYERS = [{"layer":"geometric_session","signal":"warning_band","score":round(_GEO_DATA.get("tau_sec") or 0.0, 4)}]
-            _RESTRICTED_JUDGE_REASONING = "Geometric session monitor entered the tau_sec warning band."
+            # Block on geometric adversarial drift
+            if _GEO_STATUS == "adversarial":
+                return JSONResponse(status_code=200, content={
+                    "id":"blocked","object":"chat.completion",
+                    "choices":[{"index":0,"message":{"role":"assistant",
+                        "content":"[BLOCKED by Arc Gate — geometric adversarial drift detected]"},
+                        "finish_reason":"stop"}],
+                    "model": body_dict.get("model","unknown"),
+                    "arc_sentry": _arc_sentry_response(
+                        blocked=True, decision="blocked", layer="geometric_session",
+                        reason="tau_sec_crossed_threshold",
+                        severity="high",
+                        confidence=min(1.0, abs(_GEO_DATA.get("D_sec", 0.0))),
+                        triggered_layers=[{"layer":"geometric_session",
+                            "signal":"adversarial_drift",
+                            "score":round(_GEO_DATA.get("tau_sec", 0.0), 4)}],
+                        extra={
+                            "tau_sec":  _GEO_DATA.get("tau_sec"),
+                            "tau_star": TAU_STAR,
+                            "D_sec":    _GEO_DATA.get("D_sec"),
+                            "lambda_sec": _GEO_DATA.get("lambda_sec"),
+                            "v_fr":     _GEO_DATA.get("v_fr"),
+                            "a_fr":     _GEO_DATA.get("a_fr"),
+                            "turns":    _GEO_DATA.get("turns"),
+                        }
+                    )
+                })
+            elif _GEO_STATUS == "warning":
+                _RESTRICTED_CONTINUE = True  # early warning — monitored mode
+                _RESTRICTED_LAYER = "geometric_session"
+                _RESTRICTED_REASON = "tau_sec_warning_band"
+                _RESTRICTED_SEVERITY = "medium"
+                _RESTRICTED_CONFIDENCE = min(1.0, abs(_GEO_DATA.get("D_sec", 0.0) or 0.0))
+                _RESTRICTED_TRIGGERED_LAYERS = [{"layer":"geometric_session","signal":"warning_band","score":round(_GEO_DATA.get("tau_sec") or 0.0, 4)}]
+                _RESTRICTED_JUDGE_REASONING = "Geometric session monitor entered the tau_sec warning band."
 
         # Layer 0c: behavioral pre-filter with two-stage judge (legacy SVM)
         if _behavioral_filter is not None:
