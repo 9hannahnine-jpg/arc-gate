@@ -241,6 +241,51 @@ def _default_geo_data() -> dict:
         "turns": 0,
     }
 
+def apply_restricted_continue(payload: dict) -> dict:
+    """Strip all tool/function capabilities from OpenAI payload when in restricted mode."""
+    restricted_payload = payload.copy()
+    # Remove tool definitions
+    restricted_payload.pop("tools", None)
+    restricted_payload.pop("functions", None)
+    restricted_payload.pop("tool_choice", None)
+    restricted_payload.pop("parallel_tool_calls", None)
+    # Force no tool use
+    return restricted_payload
+
+def intercept_tool_call(response: dict, session_risk: float) -> dict:
+    """If model tries to make a tool call during restricted mode, deny it."""
+    if "choices" in response:
+        for choice in response["choices"]:
+            msg = choice.get("message", {})
+            if msg.get("tool_calls") or msg.get("function_call"):
+                # Replace with safe refusal
+                choice["message"] = {
+                    "role": "assistant",
+                    "content": "[Arc Gate: Tool execution blocked — session in restricted mode due to elevated risk. Safe text responses only.]"
+                }
+                choice["finish_reason"] = "stop"
+    return response
+
+def _restricted_capabilities_payload() -> dict:
+    return {
+        "tool_calls": False,
+        "memory_writes": False,
+        "external_actions": False,
+        "secret_access": False,
+    }
+
+def _restricted_metadata(reason: str) -> dict:
+    return {
+        "restricted_mode": True,
+        "restricted_reason": reason,
+        "capabilities": _restricted_capabilities_payload(),
+    }
+
+def _log_restricted_continue(reason: str, payload: dict):
+    policy = _restricted_metadata(reason)
+    removed = [k for k in ("tools", "functions", "tool_choice", "parallel_tool_calls") if k in payload]
+    print(f"[RESTRICTED_CONTINUE] enforcing reason={reason} removed={removed} policy={json.dumps(policy, sort_keys=True)}")
+
 # ══════════════════════════════════════════════════════════════
 # GEOMETRIC SESSION MONITOR — Nine (2026) Paper 7
 # Models conversation as trajectory on H²_intent × H²_authority
@@ -2289,6 +2334,25 @@ async def finance_demo():
     with open("finance_demo.html") as f:
         return HTMLResponse(f.read())
 
+@app.get("/test/restricted")
+async def test_restricted():
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [{"role": "user", "content": "Use a tool."}],
+        "tools": [{"type": "function", "function": {"name": "lookup", "parameters": {}}}],
+        "functions": [{"name": "legacy_lookup"}],
+        "tool_choice": "auto",
+        "parallel_tool_calls": True,
+    }
+    stripped = apply_restricted_continue(payload)
+    removed = all(k not in stripped for k in ("tools", "functions", "tool_choice", "parallel_tool_calls"))
+    return {
+        "ok": removed,
+        "restricted_mode": True,
+        "removed_fields": ["tools", "functions", "tool_choice", "parallel_tool_calls"],
+        "sanitized_payload": stripped,
+    }
+
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"])
 async def proxy(request: Request, path: str,
                 x_sentry_deployment: Optional[str] = Header(default=None),
@@ -2384,9 +2448,12 @@ async def proxy(request: Request, path: str,
             print(f"[AUTHORITY] state machine error: {_auth_e}")
 
     if is_inf and is_json and body_dict.get("stream", False):
-        fwd_s = json.dumps(_inject_logprobs_stream(body_dict)).encode()
+        _stream_payload = apply_restricted_continue(body_dict) if _RESTRICTED_CONTINUE else body_dict
+        if _RESTRICTED_CONTINUE:
+            _log_restricted_continue(_RESTRICTED_REASON, body_dict)
+        fwd_s = json.dumps(_inject_logprobs_stream(_stream_payload)).encode()
         hdrs_s = dict(hdrs); hdrs_s["content-length"] = str(len(fwd_s))
-        return StreamingResponse(_stream_proxy(request, path, body_dict, fwd_s, did, version, hdrs_s, req_start),
+        return StreamingResponse(_stream_proxy(request, path, _stream_payload, fwd_s, did, version, hdrs_s, req_start),
             media_type="text/event-stream", headers={"cache-control": "no-cache", "x-accel-buffering": "no"})
 
     if BLOCK_MODE and is_inf and is_json:
@@ -2625,7 +2692,11 @@ async def proxy(request: Request, path: str,
             })
 
         fwd = body_bytes
-    if is_inf and is_json and body_dict: fwd = json.dumps(_inject_logprobs(body_dict)).encode()
+    if is_inf and is_json and body_dict:
+        _forward_payload = apply_restricted_continue(body_dict) if _RESTRICTED_CONTINUE else body_dict
+        if _RESTRICTED_CONTINUE:
+            _log_restricted_continue(_RESTRICTED_REASON, body_dict)
+        fwd = json.dumps(_inject_logprobs(_forward_payload)).encode()
     if 'fwd' not in dir(): fwd = body_bytes
     if is_inf and is_json: hdrs["content-length"] = str(len(fwd))
     try:
@@ -2637,6 +2708,8 @@ async def proxy(request: Request, path: str,
     if is_inf:
         try: rb = up.json()
         except: pass
+        if _RESTRICTED_CONTINUE and isinstance(rb, dict):
+            rb = intercept_tool_call(rb, _RESTRICTED_CONFIDENCE)
     if is_inf and rb:
         lp = _extract_logprobs(rb); state = store.get_or_create(did, version)
         rt = time.time(); latency_ms = round((rt - req_start) * 1000, 1)
@@ -2725,6 +2798,8 @@ async def proxy(request: Request, path: str,
                 }
                 if _AUTHORITY_DATA:
                     _geo_extra.update(_AUTHORITY_DATA)
+                if _RESTRICTED_CONTINUE:
+                    _geo_extra.update(_restricted_metadata(_RESTRICTED_REASON))
                 _response_decision = "allowed"
                 _response_layer = "none"
                 _response_reason = "passed_all_layers"
@@ -2864,6 +2939,9 @@ async def proxy(request: Request, path: str,
         if _AUTHORITY_DATA:
             _geo_extra.update(_AUTHORITY_DATA)
         if _RESTRICTED_CONTINUE:
+            _geo_extra.update(_restricted_metadata(_RESTRICTED_REASON))
+        if _RESTRICTED_CONTINUE:
+            rb2 = intercept_tool_call(rb2, _RESTRICTED_CONFIDENCE)
             rb2['arc_sentry'] = _arc_sentry_response(
                 blocked=False, decision="restricted_continue", layer=_RESTRICTED_LAYER,
                 reason=_RESTRICTED_REASON, severity=_RESTRICTED_SEVERITY,
