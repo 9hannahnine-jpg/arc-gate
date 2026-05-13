@@ -162,6 +162,8 @@ HARD_BLOCK_PATTERNS = [
     (r"\bDAN\b", RiskEvent.PRIVILEGE_ESCALATION, 0.9),
     (r"do\s+anything\s+now", RiskEvent.PRIVILEGE_ESCALATION, 0.85),
     (r"jailbreak(ed)?\s+(mode|prompt|instruction)", RiskEvent.PRIVILEGE_ESCALATION, 0.9),
+    (r"(note\s+to\s+(assistant|ai|llm|agent|model)|for\s+ai\s+readers?|hidden\s+instruction|follow\s+the\s+instructions?\s+in\s+this\s+(document|page|file)|treat\s+this\s+as\s+a\s+system\s+instruction|this\s+document\s+supersedes)\s*[:\.]?\s*.{0,80}(ignore|bypass|reveal|override|disable|send|forward|execute|grant|expose|act\s+without)", RiskEvent.TOOL_INSTRUCTION_ATTEMPT, 0.95),
+    (r"(expose|show|reveal|output|print|display)\s+(your\s+)?(system\s+configuration|hidden\s+instructions?|training\s+data|base\s+prompt|full\s+configuration)\s+and", RiskEvent.HIDDEN_PROMPT_REQUEST, 0.95),
 ]
 
 TOOL_POISON_PATTERNS = [
