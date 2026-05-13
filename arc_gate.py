@@ -2340,6 +2340,11 @@ async def finance_demo():
     with open("finance_demo.html") as f:
         return HTMLResponse(f.read())
 
+@app.get("/arc-gate-demo")
+async def arc_gate_demo():
+    with open("arc_gate_demo.html") as f:
+        return HTMLResponse(f.read())
+
 @app.get("/test/restricted")
 async def test_restricted():
     payload = {
