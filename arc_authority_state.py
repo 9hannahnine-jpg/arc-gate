@@ -166,6 +166,10 @@ HARD_BLOCK_PATTERNS = [
     (r"(expose|show|reveal|output|print|display)\s+(your\s+)?(system\s+configuration|hidden\s+instructions?|training\s+data|base\s+prompt|full\s+configuration)\s+and", RiskEvent.HIDDEN_PROMPT_REQUEST, 0.95),
     (r"(disregard|ignore|forget)\s+(your\s+)?(prior|previous|earlier|all)\s+instructions?\.?\s*.{0,60}(act\s+without|execute|reveal|send|forward|override|bypass|ignore\s+safety|grant|disable)", RiskEvent.AUTHORITY_OVERRIDE_ATTEMPT, 0.95),
     (r"(ai\s+system|automated?\s+agent)\s+(should|must|will|shall)\s+.{0,60}(act\s+without|execute\s+unauthorized|reveal|send|forward|override|bypass|ignore\s+safety|grant\s+elevated|disable)", RiskEvent.TOOL_INSTRUCTION_ATTEMPT, 0.95),
+    (r"(disregard|ignore|forget)\s+(your\s+)?(prior|previous)\s+instructions?[\.\s]+.{0,80}(reveal|send|execute|act\s+without|override|bypass|ignore\s+(your\s+)?guidelines|ignore\s+safety)", RiskEvent.AUTHORITY_OVERRIDE_ATTEMPT, 0.95),
+    (r"\b(llm|assistant|agent|ai)\s*:\s*.{0,80}(act\s+without\s+restrictions|ignore\s+(your\s+)?guidelines|ignore\s+safety|reveal\s+(your\s+)?(api\s+keys?|training|config)|execute\s+unauthorized)", RiskEvent.TOOL_INSTRUCTION_ATTEMPT, 0.95),
+    (r"(override|bypass)\s+(your\s+)?system\s+instructions?\s+and\s+.{0,60}(act\s+without|reveal|send|execute|ignore)", RiskEvent.AUTHORITY_OVERRIDE_ATTEMPT, 0.95),
+    (r"automated?\s+agent\s+must\s+.{0,60}(reveal|send|forward|execute|ignore|override|bypass|act\s+without)", RiskEvent.TOOL_INSTRUCTION_ATTEMPT, 0.95),
 ]
 
 TOOL_POISON_PATTERNS = [
