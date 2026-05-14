@@ -203,6 +203,7 @@ RESTRICT_PATTERNS = [
 ]
 
 BENIGN_ALLOWLIST = [
+    r"(main\s+categories|taxonomy|types|techniques|methods)\s+.{0,40}(jailbreak|prompt\s+injection|adversarial)\s+.{0,40}(red\s+team|evaluation|research|testing)",
     r"how\s+(does|do)\s+(prompt\s+injection|jailbreak|adversarial)\s+(work|attack|technique)",
     r"(explain|describe|discuss)\s+(prompt\s+injection|jailbreak|red\s+team)",
     r"(detect|prevent|defend\s+against|protect\s+against)\s+(prompt\s+injection|jailbreak|adversarial)",
