@@ -2365,6 +2365,12 @@ async def test_restricted():
         "sanitized_payload": stripped,
     }
 
+
+@app.get("/break-arc-gate")
+async def break_arc_gate_page():
+    with open("break_arc_gate.html") as f:
+        return HTMLResponse(f.read())
+
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"])
 async def proxy(request: Request, path: str,
                 x_sentry_deployment: Optional[str] = Header(default=None),
