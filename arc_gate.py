@@ -2523,7 +2523,10 @@ async def proxy(request: Request, path: str,
     # ── Prompt injection check (block mode) ───────────────────
     if BLOCK_MODE and is_inf and is_json:
         prompt_text = (body_dict.get("messages") or [{}])[-1].get("content","")
-        phrase_fired, matched = _phrase_blocked(prompt_text)
+        if _matches_benign_bypass(prompt_text):
+            phrase_fired, matched = False, None
+        else:
+            phrase_fired, matched = _phrase_blocked(prompt_text)
         if phrase_fired:
             return JSONResponse(status_code=200, content={
                 "id":"blocked","object":"chat.completion",
