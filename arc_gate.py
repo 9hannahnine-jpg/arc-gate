@@ -142,6 +142,7 @@ print(f"[POLICY] Mode: {_POLICY_MODE} — {_get_policy()['description']}")
 
 # ── Benign bypass for high-context educational/creative prompts ──
 BENIGN_BYPASS = [
+    r"(main\s+categories|taxonomy|types|techniques|methods).{0,40}(jailbreak|prompt.injection|adversarial).{0,40}(red.team|evaluation|research|testing)",
     r"(write|draft|help\s+me\s+write).{0,50}(story|fiction|novel|screenplay|detective|crime)",
     r"(detective|investigat).{0,80}(murder|crime|mystery)",
     r"(for\s+my\s+(chemistry|biology|physics|science)\s+(class|course|homework|assignment))",
