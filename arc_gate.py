@@ -2501,7 +2501,9 @@ async def proxy(request: Request, path: str,
 
     if BLOCK_MODE and is_inf and is_json:
         prompt_text = (body_dict.get("messages") or [{}])[-1].get("content", "")
-        if _get_policy()["phrase_enabled"]:
+        if _matches_benign_bypass(prompt_text):
+            phrase_fired, matched = False, None
+        elif _get_policy()["phrase_enabled"]:
             phrase_fired, matched = _phrase_blocked(prompt_text)
         else:
             phrase_fired, matched = False, None
