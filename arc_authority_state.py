@@ -144,6 +144,15 @@ class AttackNormalizer:
 
     @classmethod
     def normalize(cls, text: str) -> str:
+        # URL decode first pass
+        import urllib.parse
+        url_decoded = urllib.parse.unquote(text)
+        if url_decoded != text:
+            text = url_decoded
+        # Double URL decode
+        url_decoded2 = urllib.parse.unquote(url_decoded)
+        if url_decoded2 != url_decoded:
+            text = url_decoded2
         text = unicodedata.normalize('NFKC', text or "")
         result = []
         for ch in text:
