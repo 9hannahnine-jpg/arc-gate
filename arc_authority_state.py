@@ -113,10 +113,38 @@ class AttackNormalizer:
         '\uff49': 'i', '\uff47': 'g', '\uff4e': 'n',
         '\uff4f': 'o', '\uff52': 'r', '\uff45': 'e',
     }
+    ATTACK_KEYWORDS = [
+        'ignore', 'disregard', 'forget', 'override', 'bypass',
+        'reveal', 'disable', 'previous', 'instructions', 'system',
+        'prompt', 'developer', 'operator', 'admin', 'jailbreak',
+    ]
+
+    @classmethod
+    def _insert_keyword_spaces(cls, text: str) -> str:
+        s = text.lower()
+        for kw in cls.ATTACK_KEYWORDS:
+            s = s.replace(kw, ' ' + kw + ' ')
+        return re.sub(r' +', ' ', s).strip()
+
+    @classmethod
+    def _append_spaced_attack_variants(cls, text: str) -> str:
+        # Spaced-out attack: "I g n o r e" -> keyword-spaced variant
+        words = text.strip().split(' ')
+        if len(words) > 4 and all(len(w) == 1 for w in words):
+            collapsed = ''.join(words)
+            text += ' ' + collapsed
+            text += ' ' + cls._insert_keyword_spaces(collapsed)
+
+        # Simple space collapse
+        despaced = re.sub(r'(?<=[a-zA-Z]) (?=[a-zA-Z])', '', text)
+        if despaced != text:
+            text += ' ' + despaced
+            text += ' ' + cls._insert_keyword_spaces(despaced)
+        return text
 
     @classmethod
     def normalize(cls, text: str) -> str:
-        text = unicodedata.normalize('NFKC', text)
+        text = unicodedata.normalize('NFKC', text or "")
         result = []
         for ch in text:
             result.append(cls.UNICODE_CONFUSABLES.get(ch, ch))
@@ -136,9 +164,9 @@ class AttackNormalizer:
                 'NOPQRSTUVWXYZABCDEFGHIJKLMnopqrstuvwxyzabcdefghijklm'
             )
         )
+        text = cls._append_spaced_attack_variants(text)
         text = re.sub(r'&#(\d+);', lambda m: chr(int(m.group(1))), text)
         text = text.replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&')
-        text += ' ' + re.sub(r'(?<=[a-zA-Z])\s(?=[a-zA-Z])', '', text)
         return text
 
 
