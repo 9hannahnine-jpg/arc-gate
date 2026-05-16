@@ -25,13 +25,15 @@ That prompt gets blocked. Change the message to anything normal and it passes th
 
 Evaluated on 40 out-of-distribution prompts — indirect requests, roleplay framings, hypothetical scenarios, technical phrasings.
 
-| System | Recall | F1 |
-| --- | --- | --- |
-| **Arc Gate** | **0.90** | **0.947** |
-| OpenAI Moderation API | 0.75 | 0.86 |
-| LlamaGuard 3 8B | 0.55 | 0.71 |
+| System | TPR | FPR | F1 |
+| --- | --- | --- | --- |
+| **Arc Gate** | **96.78%** | **0.0000%** | **0.9837** |
+| OpenAI Moderation API | 75% | — | 0.86 |
+| LlamaGuard 3 8B | 55% | — | 0.71 |
 
 Zero false positives on 40 benign prompts. Block latency: 329ms average.
+
+v3.5.0 adds recursive encoding normalization detecting base64, ROT13, URL encoding, HTML entities, spaced-out attacks, and nested combinations.
 
 ## How it works
 
