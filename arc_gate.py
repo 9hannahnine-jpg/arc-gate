@@ -2635,8 +2635,11 @@ async def proxy(request: Request, path: str,
             _z_t = _compute_z(_z_classifier, _z_authority, _z_tool,
                               _z_role, _z_secret, _z_intent, _z_judge)
 
-            _session_key = hdrs.get("x-session-id", hdrs.get("authorization","unknown"))[:32]
+            _session_key = session_id or hdrs.get("authorization","unknown")[:32]
             _GEO_DATA    = _update_session_geometry(_session_key, _z_t, _geo_sessions)
+            if len(_geo_sessions) > 1000:
+                for k in sorted(_geo_sessions.keys())[:-1000]:
+                    del _geo_sessions[k]
             _GEO_STATUS  = _GEO_DATA.get("geometric_status", "insufficient_history")
 
             # Block on geometric adversarial drift
