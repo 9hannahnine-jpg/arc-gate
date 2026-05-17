@@ -87,6 +87,10 @@ Validated on Mistral 7B, Qwen 2.5 7B, and Llama 3.1 8B. 100% detection, 0% false
 
 $29/month for a dedicated API key with full monitoring. Demo key available free for evaluation.
 
+## License
+
+Commercial licensing available for organizations that cannot use AGPL-3.0. Contact 9hannahnine@gmail.com
+
 bendexgeometry.com
 
 ---
