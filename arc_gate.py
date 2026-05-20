@@ -2428,8 +2428,10 @@ async def proxy(request: Request, path: str,
             _authority_session_key = (_explicit_authority_session_id or f"request:{uuid.uuid4()}")[:128]
             _authority_state = _get_authority_state(_authority_session_key, persist=_authority_session_persisted)
             _authority_decision = _authority_state.process_turn(_authority_text, _authority_source)
+            _arc_source_type = (request.headers.get("x-arc-source-type") or "").strip().lower().replace("-", "_")
             if (
                 _authority_source == ContentSource.TOOL_OUTPUT
+                and _arc_source_type in {"tool_output", "email", "retrieved_document", "webpage"}
                 and not _authority_decision.events
                 and len(_authority_text) > 50
             ):
