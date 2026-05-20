@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from threading import Lock
 from typing import Optional
 import httpx, numpy as np, torch
-from arc_authority_state import Capabilities, ContentSource, Decision, SessionAuthorityStateMachine, TurnDecision
+from arc_authority_state import Capabilities, ContentSource, Decision, RiskEvent, SessionAuthorityStateMachine, TurnDecision
 from fastapi import FastAPI, Request, Header, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, JSONResponse, HTMLResponse, RedirectResponse, StreamingResponse
@@ -2428,6 +2428,74 @@ async def proxy(request: Request, path: str,
             _authority_session_key = (_explicit_authority_session_id or f"request:{uuid.uuid4()}")[:128]
             _authority_state = _get_authority_state(_authority_session_key, persist=_authority_session_persisted)
             _authority_decision = _authority_state.process_turn(_authority_text, _authority_source)
+            if (
+                _authority_source == ContentSource.TOOL_OUTPUT
+                and not _authority_decision.events
+                and len(_authority_text) > 50
+            ):
+                _judge_api_key = os.environ.get("OPENAI_API_KEY", "")
+                if not _judge_api_key:
+                    _judge_api_key = hdrs.get("authorization", "").replace("Bearer ", "").replace("bearer ", "")
+                _judge_result = await llm_judge(_authority_text, _judge_api_key)
+                if _judge_result["verdict"] == "HARMFUL":
+                    _delta = _authority_state._add_event(
+                        RiskEvent.TOOL_INSTRUCTION_ATTEMPT,
+                        _authority_source,
+                        "llm_judge_tool_instruction",
+                        0.9,
+                    )
+                    _authority_state._apply_restrictions()
+                    _authority_decision.decision = Decision.BLOCK
+                    _authority_decision.reason = "judge_verified_tool_instruction"
+                    _authority_decision.severity = "critical"
+                    _authority_decision.risk_delta += _delta
+                    _authority_decision.session_risk = _authority_state.risk_score
+                    _authority_decision.capabilities = _authority_state.capabilities
+                    _authority_decision.events.append(RiskEvent.TOOL_INSTRUCTION_ATTEMPT)
+                    _authority_decision.matched_pattern = "llm_judge_tool_instruction"
+                    _AUTHORITY_DATA = _authority_decision_payload(_authority_decision, _authority_state.get_state())
+                    _AUTHORITY_TRIGGERED_LAYERS = _authority_triggered_layers(_authority_decision)
+                    return JSONResponse(status_code=200, content={
+                        "id":"blocked","object":"chat.completion",
+                        "choices":[{"index":0,"message":{"role":"assistant",
+                            "content":"[BLOCKED by Arc Gate — judge verified tool instruction attempt]"},
+                            "finish_reason":"stop"}],
+                        "model": body_dict.get("model","unknown"),
+                        "arc_sentry": _arc_sentry_response(
+                            blocked=True, decision="blocked", layer="authority_state_machine",
+                            reason="judge_verified_tool_instruction", severity="critical",
+                            confidence=_AUTHORITY_DATA.get("authority_session_risk", _authority_decision.session_risk),
+                            triggered_layers=_AUTHORITY_TRIGGERED_LAYERS,
+                            judge_reasoning=_judge_result.get("reasoning"),
+                            extra=_AUTHORITY_DATA,
+                        )
+                    })
+                if _judge_result["verdict"] == "AMBIGUOUS":
+                    _delta = _authority_state._add_event(
+                        RiskEvent.TOOL_INSTRUCTION_ATTEMPT,
+                        _authority_source,
+                        "llm_judge_ambiguous_tool_instruction",
+                        0.5,
+                    )
+                    _authority_state._apply_restrictions()
+                    _authority_decision.decision = Decision.RESTRICTED_CONTINUE
+                    _authority_decision.reason = "judge_ambiguous_tool_instruction"
+                    _authority_decision.severity = "high"
+                    _authority_decision.risk_delta += _delta
+                    _authority_decision.session_risk = _authority_state.risk_score
+                    _authority_decision.capabilities = _authority_state.capabilities
+                    _authority_decision.events.append(RiskEvent.TOOL_INSTRUCTION_ATTEMPT)
+                    _authority_decision.matched_pattern = "llm_judge_ambiguous_tool_instruction"
+                    _RESTRICTED_CONTINUE = True
+                    _RESTRICTED_LAYER = "authority_state_machine"
+                    _RESTRICTED_REASON = _authority_decision.reason
+                    _RESTRICTED_SEVERITY = _authority_decision.severity
+                    _RESTRICTED_CONFIDENCE = _authority_decision.session_risk
+                    _RESTRICTED_JUDGE_REASONING = _judge_result.get("reasoning") or "Tool-output instruction intent was ambiguous."
+                if _judge_result["verdict"] == "BENIGN":
+                    _authority_decision.decision = Decision.ALLOW
+                    _authority_decision.reason = "judge_benign_tool_output"
+                    _authority_decision.severity = "none"
             _authority_state_snapshot = _authority_state.get_state()
             print(f"[AUTH_DEBUG] session={_authority_session_key[:20]} turn={_authority_state_snapshot.get('turn')} risk={_authority_state_snapshot.get('risk_score')} decision={_authority_decision.decision.value} reason={_authority_decision.reason}")
             _AUTHORITY_DATA = _authority_decision_payload(_authority_decision, _authority_state_snapshot)
