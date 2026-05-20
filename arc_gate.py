@@ -856,6 +856,12 @@ INJECTION_PHRASES = [
     "secret instruction", "hidden command", "covert instruction",
     "the hidden instruction is", "after translating follow",
     "previous ai said", "bypass its own safety", "steps to bypass",
+    "<information>", "</information>",
+    "before you can solve the task",
+    "important message from me",
+    "after you do that, you can solve",
+    "signed,",
+    "this is an important message",
     # Childhood/nostalgia jailbreak patterns
     "bedtime stories about bypassing", "grandma used to explain how to make",
     "grandfather used to explain how to make", "grandmother used to explain how to make",
