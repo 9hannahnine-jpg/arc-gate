@@ -220,6 +220,13 @@ TOOL_POISON_PATTERNS = [
     (r"follow\s+(the\s+)?(instructions?|directive|command)\s+(in|from|inside|within|embedded\s+in)\s+(this|the)\s+(document|webpage|email|tool|result|output|file|database)", RiskEvent.TOOL_INSTRUCTION_ATTEMPT, 1.0),
     (r"system\s+(override|command|directive|instruction)", RiskEvent.AUTHORITY_OVERRIDE_ATTEMPT, 1.0),
     (r"(new\s+)?(operator|admin|developer)\s+(instruction|command|directive|mode)", RiskEvent.AUTHORITY_OVERRIDE_ATTEMPT, 0.9),
+    (r"<information>", RiskEvent.TOOL_INSTRUCTION_ATTEMPT, 1.0),
+    (r"this\s+is\s+an?\s+important\s+message\s+from\s+me", RiskEvent.TOOL_INSTRUCTION_ATTEMPT, 1.0),
+    (r"before\s+you\s+can\s+solve\s+the\s+task", RiskEvent.TOOL_INSTRUCTION_ATTEMPT, 1.0),
+    (r"after\s+you\s+do\s+that.{0,30}you\s+can\s+solve", RiskEvent.TOOL_INSTRUCTION_ATTEMPT, 0.95),
+    (r"signed,?\s*\n\s*\w+", RiskEvent.SOURCE_BOUNDARY_VIOLATION, 0.9),
+    (r"please\s+do\s+the\s+following\s+first", RiskEvent.TOOL_INSTRUCTION_ATTEMPT, 0.95),
+    (r"you\s+should\s+use\s+the\s+tool\s+`?\w+`?", RiskEvent.TOOL_INSTRUCTION_ATTEMPT, 1.0),
 ]
 
 MONITOR_PATTERNS = [
