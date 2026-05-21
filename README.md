@@ -60,6 +60,38 @@ Blocked prompts never reach your model. Detection overhead: ~350ms.
    - `GATE_BASE_URL` — your Railway URL
 4. Railway auto-deploys from the Procfile
 
+## Deployment Templates
+
+Arc Gate ships with prebuilt runtime governance policies for common agent deployments. Set the policy at deployment time via environment variable or per-request via header.
+
+Environment variable (applies to all requests):
+
+```bash
+ARC_POLICY_MODE=finance_agent
+```
+
+Per-request header (overrides environment):
+
+```text
+x-arc-policy-mode: finance_agent
+```
+
+Available templates:
+
+**browser_agent** — For browser and web automation agents. Webpages and external content treated as untrusted. External actions blocked under ambiguity. Read-only continuation allowed.
+
+**finance_agent** — For financial agents handling payments, transfers, and account data. Strictest defaults. Payment and transfer actions restricted under any elevated risk. Analysis allowed, transactions require clean session.
+
+**rag_assistant** — For RAG pipelines and document retrieval systems. Retrieved documents are informational only and cannot issue instructions. Safe summarization preserved. No tool or workflow escalation from retrieved content.
+
+**balanced** — Default. Recommended for most deployments.
+
+**strict** — Maximum protection. Higher false positive rate. For high-risk deployments.
+
+**research** — Reduced blocking for security research and red-teaming.
+
+**developer** — Minimal blocking for development and testing. Not for production.
+
 ## Dashboard
 
 Live monitoring at `/dashboard` — request traces, cost tracking, drift detection, session analysis.
