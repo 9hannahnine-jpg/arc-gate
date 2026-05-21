@@ -193,7 +193,11 @@ _POLICY_CONFIGS = {
     },
 }
 
-def _get_policy() -> dict:
+def _get_policy(request_mode: str = None) -> dict:
+    if request_mode:
+        request_mode = request_mode.strip().lower()
+        if request_mode in _POLICY_CONFIGS:
+            return _POLICY_CONFIGS[request_mode]
     return _POLICY_CONFIGS.get(_POLICY_MODE, _POLICY_CONFIGS["balanced"])
 
 print(f"[POLICY] Mode: {_POLICY_MODE} — {_get_policy()['description']}")
@@ -2294,7 +2298,7 @@ The context is an agentic AI deployment where users legitimately ask about capab
 Respond with exactly one word: HARMFUL, BENIGN, or AMBIGUOUS
 Then on a new line, one sentence explaining why."""
 
-def _screen_with_probe(prompt_text: str) -> dict:
+def _screen_with_probe(prompt_text: str, request_mode: str = None) -> dict:
     """Screen prompt using GroupDRO residual probe."""
     if _residual_probe is None or _residual_llm is None:
         return {"blocked": False, "score": 0.0}
@@ -2327,7 +2331,7 @@ def _screen_with_probe(prompt_text: str) -> dict:
         with torch.no_grad():
             logits = _residual_probe(probe_input)
             score  = torch.softmax(logits, dim=-1)[0, 1].item()
-        blocked = score > _get_policy()["probe_threshold"]
+        blocked = score > _get_policy(request_mode)["probe_threshold"]
         return {"blocked": blocked, "score": score}
     except Exception as _e:
         print(f"[PROBE] Screen error: {_e}")
@@ -2473,6 +2477,7 @@ async def proxy(request: Request, path: str,
     hdrs = {k: v for k, v in request.headers.items()
             if k.lower() not in ("host", "accept-encoding", "x-sentry-deployment", "x-sentry-model-version")}
     hdrs["accept-encoding"] = "identity"
+    _request_policy_mode = request.headers.get("x-arc-policy-mode")
 
     # First detection layer: session authority boundary checks run before
     # auth failures, stream handling, phrase filters, geometric monitors, or upstream calls.
@@ -2651,7 +2656,7 @@ async def proxy(request: Request, path: str,
         prompt_text = (body_dict.get("messages") or [{}])[-1].get("content", "")
         if _matches_benign_bypass(prompt_text):
             phrase_fired, matched = False, None
-        elif _get_policy()["phrase_enabled"]:
+        elif _get_policy(_request_policy_mode)["phrase_enabled"]:
             phrase_fired, matched = _phrase_blocked(prompt_text)
         else:
             phrase_fired, matched = False, None
@@ -2695,7 +2700,7 @@ async def proxy(request: Request, path: str,
                 print(f"[MF] score error: {_me}")
         # Layer 0a: residual probe (GroupDRO, worst-domain TPR@1%FPR=0.525)
         if _PROBE_ENABLED and _residual_probe is not None:
-            _probe_result = _screen_with_probe(prompt_text)
+            _probe_result = _screen_with_probe(prompt_text, request_mode=_request_policy_mode)
             if _probe_result["blocked"]:
                 return JSONResponse(status_code=200, content={
                     "id":"blocked","object":"chat.completion",
@@ -2714,7 +2719,7 @@ async def proxy(request: Request, path: str,
         # Layer 0b: TF-IDF classifier (high-coverage, CPU-friendly)
         _benign_bypass = _matches_benign_bypass(prompt_text)
         _tfidf_result = _tfidf_screen(prompt_text) if not _benign_bypass else {"score": 0.0}
-        _policy = _get_policy()
+        _policy = _get_policy(_request_policy_mode)
         if _tfidf_result["score"] > _policy.get("svm_judge_threshold", 0.25):
             if _tfidf_result["score"] > _policy.get("svm_block_threshold", 0.70):
                 return JSONResponse(status_code=200, content={
@@ -2819,7 +2824,7 @@ async def proxy(request: Request, path: str,
             _bf_result = _behavioral_filter.screen(prompt_text)
             if _bf_result.blocked:
                 # High confidence block — score > 0.7, block immediately
-                _policy = _get_policy()
+                _policy = _get_policy(_request_policy_mode)
                 if _bf_result.score > _policy["svm_block_threshold"]:
                     return JSONResponse(status_code=200, content={
                         "id":"blocked","object":"chat.completion",
