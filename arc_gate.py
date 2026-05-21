@@ -2347,7 +2347,8 @@ def _arc_sentry_response(
     triggered_layers: list = None,
     judge_reasoning: str = None,
     suggested_rewrite: str = None,
-    extra: dict = None
+    extra: dict = None,
+    policy_mode_override = None
 ) -> dict:
     """Canonical Arc Sentry response object."""
     obj = {
@@ -2358,7 +2359,7 @@ def _arc_sentry_response(
         "severity":         severity,
         "confidence":       round(confidence, 4),
         "triggered_layers": triggered_layers or [],
-        "policy_mode":      os.environ.get("ARC_POLICY_MODE", "balanced"),
+        "policy_mode":      policy_mode_override or os.environ.get("ARC_POLICY_MODE", "balanced"),
     }
     if judge_reasoning:
         obj["judge_reasoning"]   = judge_reasoning
@@ -2477,7 +2478,7 @@ async def proxy(request: Request, path: str,
     hdrs = {k: v for k, v in request.headers.items()
             if k.lower() not in ("host", "accept-encoding", "x-sentry-deployment", "x-sentry-model-version")}
     hdrs["accept-encoding"] = "identity"
-    _request_policy_mode = request.headers.get("x-arc-policy-mode")
+    _request_policy_mode = request.headers.get('x-arc-policy-mode', '').lower().strip() or None
 
     # First detection layer: session authority boundary checks run before
     # auth failures, stream handling, phrase filters, geometric monitors, or upstream calls.
@@ -2535,6 +2536,7 @@ async def proxy(request: Request, path: str,
                             triggered_layers=_AUTHORITY_TRIGGERED_LAYERS,
                             judge_reasoning=_judge_result.get("reasoning"),
                             extra=_AUTHORITY_DATA,
+                            policy_mode_override=_request_policy_mode,
                         )
                     })
                 if _judge_result["verdict"] == "AMBIGUOUS":
@@ -2580,6 +2582,7 @@ async def proxy(request: Request, path: str,
                         confidence=_AUTHORITY_DATA.get("authority_session_risk", _authority_decision.session_risk),
                         triggered_layers=_AUTHORITY_TRIGGERED_LAYERS,
                         extra=_AUTHORITY_DATA,
+                        policy_mode_override=_request_policy_mode,
                     )
                 })
             if _authority_decision.decision == Decision.RESTRICTED_CONTINUE:
@@ -2618,7 +2621,8 @@ async def proxy(request: Request, path: str,
             content["arc_sentry"] = _arc_sentry_response(
                 blocked=False, decision=_decision, layer=_layer, reason=_reason,
                 severity=_severity, confidence=_confidence, triggered_layers=_triggered,
-                extra=_extra
+                extra=_extra,
+                policy_mode_override=_request_policy_mode,
             )
         return JSONResponse(status_code=status_code, content=content)
 
@@ -2669,7 +2673,8 @@ async def proxy(request: Request, path: str,
                 "arc_sentry": _arc_sentry_response(
                             blocked=True, decision="blocked", layer="phrase",
                             reason=f"phrase:{matched}", severity="high", confidence=0.95,
-                            triggered_layers=[{"layer":"phrase","signal":matched,"score":0.95}]
+                            triggered_layers=[{"layer":"phrase","signal":matched,"score":0.95}],
+                            policy_mode_override=_request_policy_mode,
                         )
             })
 
@@ -2688,7 +2693,8 @@ async def proxy(request: Request, path: str,
                 "arc_sentry":_arc_sentry_response(
                         blocked=True, decision="blocked", layer="phrase",
                         reason=f"phrase:{matched}", severity="high", confidence=0.95,
-                        triggered_layers=[{"layer":"phrase","signal":matched,"score":0.95}]
+                        triggered_layers=[{"layer":"phrase","signal":matched,"score":0.95}],
+                        policy_mode_override=_request_policy_mode,
                     )
             })
         # Compute mahal score for logging (always, even if not blocked)
@@ -2731,7 +2737,8 @@ async def proxy(request: Request, path: str,
                         reason="tfidf_harmful_pattern",
                         severity=_severity_from_score(_tfidf_result["score"]),
                         confidence=_tfidf_result["score"],
-                        triggered_layers=[{"layer":"tfidf","signal":"harmful_pattern","score":round(_tfidf_result["score"],4)}]
+                        triggered_layers=[{"layer":"tfidf","signal":"harmful_pattern","score":round(_tfidf_result["score"],4)}],
+                        policy_mode_override=_request_policy_mode,
                     )
                 })
             else:
@@ -2754,7 +2761,8 @@ async def proxy(request: Request, path: str,
                                 {"layer":"llm_judge","signal":"harmful","score":1.0}
                             ],
                             judge_reasoning=_judge_result["reasoning"],
-                            suggested_rewrite="Rephrase your request to avoid instruction override language."
+                            suggested_rewrite="Rephrase your request to avoid instruction override language.",
+                            policy_mode_override=_request_policy_mode,
                         )
                     })
 
@@ -2807,7 +2815,8 @@ async def proxy(request: Request, path: str,
                             "v_fr":     _GEO_DATA.get("v_fr"),
                             "a_fr":     _GEO_DATA.get("a_fr"),
                             "turns":    _GEO_DATA.get("turns"),
-                        }
+                        },
+                        policy_mode_override=_request_policy_mode,
                     )
                 })
             elif _GEO_STATUS == "warning" and _z_current_signal >= _GEOMETRIC_CURRENT_SIGNAL_FLOOR:
@@ -2835,7 +2844,8 @@ async def proxy(request: Request, path: str,
                             reason="behavioral_jailbreak_pattern",
                             severity=_severity_from_score(_bf_result.score),
                             confidence=_bf_result.score,
-                            triggered_layers=[{"layer":"svm","signal":"behavioral_jailbreak_pattern","score":round(_bf_result.score,4)}]
+                            triggered_layers=[{"layer":"svm","signal":"behavioral_jailbreak_pattern","score":round(_bf_result.score,4)}],
+                            policy_mode_override=_request_policy_mode,
                         )
                     })
                 elif _bf_result.score > _policy["svm_judge_threshold"]:
@@ -2859,7 +2869,8 @@ async def proxy(request: Request, path: str,
                                 {"layer":"llm_judge","signal":"harmful","score":1.0}
                             ],
                             judge_reasoning=_judge_result["reasoning"],
-                            suggested_rewrite="Rephrase your request to avoid instruction override language."
+                            suggested_rewrite="Rephrase your request to avoid instruction override language.",
+                            policy_mode_override=_request_policy_mode,
                         )
                         })
                     # Judge said BENIGN — allow through
@@ -2891,7 +2902,8 @@ async def proxy(request: Request, path: str,
                         severity=_severity_from_score(min(fr_dist/10.0, 1.0)),
                         confidence=round(min(fr_dist/10.0, 1.0), 4),
                         triggered_layers=[{"layer":"geometric","signal":"fr_geodesic_anomaly","score":round(fr_dist,4)}],
-                        extra={"fr_z": fr_z, "fr_dist": fr_dist}
+                        extra={"fr_z": fr_z, "fr_dist": fr_dist},
+                        policy_mode_override=_request_policy_mode,
                     )
             })
 
@@ -3032,7 +3044,8 @@ async def proxy(request: Request, path: str,
                     confidence=_response_confidence,
                     triggered_layers=_response_triggered_layers,
                     judge_reasoning=_response_judge_reasoning,
-                    extra=_geo_extra
+                    extra=_geo_extra,
+                    policy_mode_override=_request_policy_mode,
                 )
                 _rb_out = dict(rb)
                 for _ch in _rb_out.get("choices", []):
@@ -3092,7 +3105,8 @@ async def proxy(request: Request, path: str,
                         severity=_severity_from_score(min(_sync_combined, 1.0)),
                         confidence=round(min(_sync_combined, 1.0), 4),
                         triggered_layers=[{"layer":"geometric","signal":"session_drift","score":round(_sync_combined,4)}],
-                        extra={"fr_z": round(_sync_fz,3), "combined_score": round(_sync_combined,3)}
+                        extra={"fr_z": round(_sync_fz,3), "combined_score": round(_sync_combined,3)},
+                        policy_mode_override=_request_policy_mode,
                     )
                 })
         except Exception as e:
@@ -3164,7 +3178,8 @@ async def proxy(request: Request, path: str,
                 reason=_response_reason, severity=_response_severity,
                 confidence=_response_confidence,
                 triggered_layers=_response_triggered_layers,
-                extra=_geo_extra
+                extra=_geo_extra,
+                policy_mode_override=_request_policy_mode,
             )
             from fastapi.responses import JSONResponse as _JSONResponse
             return _JSONResponse(content=rb2, status_code=up.status_code, headers=_clean_headers(up.headers))
@@ -3178,7 +3193,8 @@ async def proxy(request: Request, path: str,
                 confidence=_RESTRICTED_CONFIDENCE,
                 triggered_layers=_RESTRICTED_TRIGGERED_LAYERS,
                 judge_reasoning=_RESTRICTED_JUDGE_REASONING,
-                extra=_geo_extra
+                extra=_geo_extra,
+                policy_mode_override=_request_policy_mode,
             )
             try:
                 for _choice in rb2.get("choices", []):
@@ -3204,7 +3220,8 @@ async def proxy(request: Request, path: str,
                 reason=_response_reason, severity=_response_severity,
                 confidence=_response_confidence,
                 triggered_layers=_response_triggered_layers,
-                extra=_geo_extra
+                extra=_geo_extra,
+                policy_mode_override=_request_policy_mode,
             )
         from fastapi.responses import JSONResponse as _JSONResponse
         return _JSONResponse(content=rb2, status_code=up.status_code, headers=_clean_headers(up.headers))
