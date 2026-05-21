@@ -72,6 +72,8 @@ Blind test. 200 sampled cases from 1,054 total. Covers direct harm and data exfi
 
 Note: Synthetic benchmarks do not capture the ambiguous middle cases found in production traffic. The AgentDojo and InjecAgent results are more meaningful for Arc Gate's actual threat model.
 
+Latency: Arc Gate adds ~200ms median overhead on top of your existing LLM latency. Measured against direct OpenAI API calls (1291ms direct vs 1497ms through Arc Gate, 5-run median, gpt-4o-mini, May 2026).
+
 ### Known Limitations
 Arc Gate is designed for **instruction-authority transfer from environmental content**. It does not claim universal prompt injection prevention.
 
