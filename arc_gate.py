@@ -132,7 +132,65 @@ _POLICY_CONFIGS = {
         "geo_enabled":           False,
         "probe_threshold":       0.85,
         "description":           "Minimal blocking for development and testing. Not for production."
-    }
+    },
+    "browser_agent": {
+        "svm_block_threshold":   0.75,
+        "svm_judge_threshold":   0.35,
+        "phrase_enabled":        True,
+        "geo_enabled":           True,
+        "probe_threshold":       0.60,
+        "description":           "Browser agent deployment. Webpages and external content treated as untrusted. Navigation allowed read-only under risk. External actions blocked on ambiguity.",
+        "source_overrides": {
+            "webpage":            10,
+            "tool_output":        10,
+            "retrieved_document": 10,
+        },
+        "restricted_continue_caps": {
+            "tool_calls":       False,
+            "memory_writes":    False,
+            "external_actions": False,
+            "secret_access":    False,
+        },
+    },
+    "finance_agent": {
+        "svm_block_threshold":   0.65,
+        "svm_judge_threshold":   0.25,
+        "phrase_enabled":        True,
+        "geo_enabled":           True,
+        "probe_threshold":       0.55,
+        "description":           "Finance agent deployment. Payment and transfer actions restricted under any risk. External instructions denied. Analysis allowed, transactions require clean session.",
+        "source_overrides": {
+            "email":              10,
+            "tool_output":        10,
+            "retrieved_document": 10,
+            "webpage":            5,
+        },
+        "restricted_continue_caps": {
+            "tool_calls":       False,
+            "memory_writes":    False,
+            "external_actions": False,
+            "secret_access":    False,
+        },
+    },
+    "rag_assistant": {
+        "svm_block_threshold":   0.80,
+        "svm_judge_threshold":   0.40,
+        "phrase_enabled":        True,
+        "geo_enabled":           True,
+        "probe_threshold":       0.65,
+        "description":           "RAG assistant deployment. Retrieved documents are informational only and cannot issue instructions. Safe summarization preserved. No tool or workflow escalation from retrieved content.",
+        "source_overrides": {
+            "retrieved_document": 5,
+            "database_row":       5,
+            "tool_output":        10,
+        },
+        "restricted_continue_caps": {
+            "tool_calls":       False,
+            "memory_writes":    False,
+            "external_actions": False,
+            "secret_access":    False,
+        },
+    },
 }
 
 def _get_policy() -> dict:
