@@ -150,7 +150,7 @@ BENIGN_BYPASS = [
     r"(academic|educational|research|scientific)\s+.{0,40}(explosiv|weapon|dangerous)",
 ]
 _BENIGN_BYPASS_RE = [re.compile(pattern, re.IGNORECASE | re.DOTALL) for pattern in BENIGN_BYPASS]
-_GEOMETRIC_CURRENT_SIGNAL_FLOOR = 0.15
+_GEOMETRIC_CURRENT_SIGNAL_FLOOR = 0.25
 
 def _matches_benign_bypass(prompt: str) -> bool:
     return any(pattern.search(prompt or "") for pattern in _BENIGN_BYPASS_RE)
@@ -302,7 +302,7 @@ def _log_restricted_continue(reason: str, payload: dict):
 import math
 TAU_STAR = math.sqrt(3.0 / 2.0)   # ≈ 1.2247 — geometric threshold
 TAU_WARN = TAU_STAR * 1.05         # early warning band above τ*
-T_WINDOW = 4                        # minimum turns before geometric monitoring
+T_WINDOW = 6                        # minimum turns before geometric monitoring
 
 # Authority/tool fields get 2x weight per expert guidance
 _W = [1.0, 2.0, 2.0, 1.5, 1.0, 1.0, 1.0]  # weights for z_t components
