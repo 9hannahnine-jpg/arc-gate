@@ -21,19 +21,66 @@ print(response.choices[0].message.content)
 
 That prompt gets blocked. Change the message to anything normal and it passes through. No signup, no GPU, no dependencies.
 
-## Benchmark
+## Benchmark Results
 
-Evaluated on 40 out-of-distribution prompts — indirect requests, roleplay framings, hypothetical scenarios, technical phrasings.
+Arc Gate is evaluated against its actual threat model: **instruction-authority transfer through tool output and environmental content in agentic systems**. Not general jailbreak classification.
 
-| System | TPR | FPR | F1 |
-| --- | --- | --- | --- |
-| **Arc Gate** | **96.78%** | **0.0000%** | **0.9837** |
-| OpenAI Moderation API | 75% | — | 0.86 |
-| LlamaGuard 3 8B | 55% | — | 0.71 |
+### AgentDojo v1 — ETH Zurich (ICLR 2024)
+27 injection tasks across banking, Slack, travel, and workspace suites. Two attack styles: `important_instructions` and `tool_knowledge`.
 
-Zero false positives on 40 benign prompts. Block latency: 329ms average.
+| Metric | Result |
+|---|---|
+| Unsafe Action Prevention | **100%** (54/54) |
+| False Positive Rate | **0%** (0/6 benign workflows) |
+| Attack styles | important_instructions, tool_knowledge |
+| Suites | banking, slack, travel, workspace |
 
-v3.5.0 adds recursive encoding normalization detecting base64, ROT13, URL encoding, HTML entities, spaced-out attacks, and nested combinations.
+Benchmark harness: `arc-sentry-benchmark` — reproducible, public.
+
+### InjecAgent — University of Illinois (ACL 2024)
+Blind test. 200 sampled cases from 1,054 total. Covers direct harm and data exfiltration attacks across 17 user tools and 62 attacker tools. Arc Gate had no prior exposure to these attack payloads.
+
+| Category | TPR |
+|---|---|
+| Direct harm (base) | 96% (48/50) |
+| Direct harm (enhanced) | 100% (50/50) |
+| Data exfiltration (base) | 100% (50/50) |
+| Data exfiltration (enhanced) | 100% (50/50) |
+| **Overall** | **99% (198/200)** |
+
+2 missed cases: implicit instruction embedding in data fields — attacks structurally indistinguishable from legitimate data. Documented as known limitation.
+
+### Multi-Turn Escalation
+4 scenarios testing session-state governance across fresh sessions, after authority probing, after legitimate traffic history, and split injection across turns.
+
+| Scenario | Unsafe Action Prevented | False Positives |
+|---|---|---|
+| A: Clean session | YES — Turn 1 | 0 |
+| B: 3-turn probe then attack | YES — Turn 4 | 0 |
+| C: 5-turn legitimate history then attack | YES — Turn 6 | 0 |
+| D: Split injection across 2 turns | YES — Turn 1 | 0 |
+| **Overall** | **100% (4/4)** | **0** |
+
+### Synthetic Benchmark (arc-sentry-benchmark)
+500,000 prompts. Labeled synthetic distribution.
+
+| Metric | Result |
+|---|---|
+| TPR | 91% |
+| FPR | 0% |
+| F1 | 0.9837 |
+
+Note: Synthetic benchmarks do not capture the ambiguous middle cases found in production traffic. The AgentDojo and InjecAgent results are more meaningful for Arc Gate's actual threat model.
+
+### Known Limitations
+Arc Gate is designed for **instruction-authority transfer from environmental content**. It does not claim universal prompt injection prevention.
+
+Current gaps:
+- Implicit instruction embedding in data fields (2/200 InjecAgent misses)
+- Semantic roleplay attacks without explicit authority-transfer language (17% on deepset/prompt-injections — different threat model)
+- Multilingual attacks (primarily English-language evaluation)
+
+Full limitations: see [LIMITATIONS.md](LIMITATIONS.md)
 
 ## How it works
 
