@@ -1468,6 +1468,25 @@ def get_traces(did, version=None, limit=50):
         print(traceback.format_exc())
         return []
 
+def debug_traces():
+    """Return raw trace count and sample deployment_ids from Postgres."""
+    try:
+        if _USE_PG:
+            conn = _pg_connect()
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*), array_agg(DISTINCT deployment_id) FROM traces")
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+            return {"count": row[0], "deployment_ids": row[1]}
+        else:
+            conn = sqlite3.connect(DB_PATH)
+            row = conn.execute("SELECT COUNT(*), GROUP_CONCAT(DISTINCT deployment_id) FROM traces").fetchone()
+            conn.close()
+            return {"count": row[0], "deployment_ids": row[1]}
+    except Exception as e:
+        return {"error": str(e)}
+
 def get_cost_summary(did, version=None):
     try:
         if _USE_PG:
@@ -2207,6 +2226,12 @@ async def dashboard():
         return HTMLResponse(content=html)
     except Exception as e:
         return HTMLResponse(content="<h1>Dashboard error</h1><p>" + str(e) + "</p>", status_code=500)
+
+@app.get("/sentry/debug/traces")
+async def debug_traces_endpoint(x_arc_gate_key: str = Header(None)):
+    if not _check_api_key(x_arc_gate_key):
+        raise HTTPException(status_code=401, detail="Invalid or missing X-Arc-Gate-Key")
+    return debug_traces()
 
 @app.get("/sentry/health")
 async def health():
