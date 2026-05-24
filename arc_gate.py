@@ -14,8 +14,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, JSONResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.security import APIKeyHeader as _APIKeyHeader
 
-_PG_URL = os.environ.get('DATABASE_URL', '')
-_USE_PG = bool(_PG_URL)
+_PG_URL = (
+    os.environ.get('DATABASE_URL', '') or
+    'postgresql://{}:{}@{}:{}/{}'.format(
+        os.environ.get('PGUSER', ''),
+        os.environ.get('PGPASSWORD', ''),
+        os.environ.get('PGHOST', ''),
+        os.environ.get('PGPORT', '5432'),
+        os.environ.get('PGDATABASE', ''),
+    ) if os.environ.get('PGHOST') else ''
+)
+_USE_PG = bool(_PG_URL and os.environ.get('PGHOST'))
+print(f'[DB] USE_PG={_USE_PG} PGHOST={os.environ.get("PGHOST", "not set")}')
 if _USE_PG:
     import psycopg2
     import psycopg2.extras
