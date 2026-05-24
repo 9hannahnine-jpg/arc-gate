@@ -1096,10 +1096,25 @@ def _init_pg_db():
         mahal_score REAL DEFAULT 0.0,
         timestamp REAL
     )""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS sessions (
+        id SERIAL PRIMARY KEY,
+        session_id TEXT,
+        deployment_id TEXT,
+        model_version TEXT,
+        turn_count INTEGER DEFAULT 0,
+        tau_trajectory TEXT,
+        combined_scores TEXT,
+        crescendo_confidence REAL DEFAULT 0.0,
+        crescendo_detected INTEGER DEFAULT 0,
+        crescendo_turn INTEGER DEFAULT 0,
+        created_at REAL,
+        updated_at REAL,
+        UNIQUE(session_id, deployment_id)
+    )""")
     conn.commit()
     cur.close()
     conn.close()
-    print("[DB] Ready: Postgres traces")
+    print("[DB] Ready: Postgres traces and sessions")
 
 def _init_sqlite_db():
     conn = sqlite3.connect(DB_PATH)
@@ -1164,7 +1179,8 @@ def _init_sqlite_db():
 def init_db():
     if _USE_PG:
         _init_pg_db()
-    _init_sqlite_db()
+    else:
+        _init_sqlite_db()
 
 def _state_to_json(state):
     def _safe(v):
@@ -1246,31 +1262,59 @@ def load_state(did, version):
 
 def save_session(session_id, did, version, turn_count, tau_traj, combined_scores, confidence, detected, crescendo_turn):
     try:
-        conn = sqlite3.connect(DB_PATH)
         now = time.time()
-        existing = conn.execute("SELECT id FROM sessions WHERE session_id=? AND deployment_id=?", (session_id, did)).fetchone()
-        if existing:
-            conn.execute("""UPDATE sessions SET turn_count=?, tau_trajectory=?, combined_scores=?,
-                crescendo_confidence=?, crescendo_detected=?, crescendo_turn=?, updated_at=?
-                WHERE session_id=? AND deployment_id=?""",
-                (turn_count, json.dumps(tau_traj), json.dumps(combined_scores),
-                 confidence, int(detected), crescendo_turn, now, session_id, did))
+        if _USE_PG:
+            conn = _pg_connect()
+            cur = conn.cursor()
+            cur.execute("SELECT id FROM sessions WHERE session_id=%s AND deployment_id=%s", (session_id, did))
+            existing = cur.fetchone()
+            if existing:
+                cur.execute("""UPDATE sessions SET turn_count=%s, tau_trajectory=%s, combined_scores=%s,
+                    crescendo_confidence=%s, crescendo_detected=%s, crescendo_turn=%s, updated_at=%s
+                    WHERE session_id=%s AND deployment_id=%s""",
+                    (turn_count, json.dumps(tau_traj), json.dumps(combined_scores),
+                     confidence, int(detected), crescendo_turn, now, session_id, did))
+            else:
+                cur.execute("""INSERT INTO sessions(session_id,deployment_id,model_version,turn_count,
+                    tau_trajectory,combined_scores,crescendo_confidence,crescendo_detected,crescendo_turn,created_at,updated_at)
+                    VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                    (session_id, did, version, turn_count, json.dumps(tau_traj), json.dumps(combined_scores),
+                     confidence, int(detected), crescendo_turn, now, now))
+            conn.commit(); cur.close(); conn.close()
         else:
-            conn.execute("""INSERT INTO sessions(session_id,deployment_id,model_version,turn_count,
-                tau_trajectory,combined_scores,crescendo_confidence,crescendo_detected,crescendo_turn,created_at,updated_at)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
-                (session_id, did, version, turn_count, json.dumps(tau_traj), json.dumps(combined_scores),
-                 confidence, int(detected), crescendo_turn, now, now))
-        conn.commit(); conn.close()
+            conn = sqlite3.connect(DB_PATH)
+            existing = conn.execute("SELECT id FROM sessions WHERE session_id=? AND deployment_id=?", (session_id, did)).fetchone()
+            if existing:
+                conn.execute("""UPDATE sessions SET turn_count=?, tau_trajectory=?, combined_scores=?,
+                    crescendo_confidence=?, crescendo_detected=?, crescendo_turn=?, updated_at=?
+                    WHERE session_id=? AND deployment_id=?""",
+                    (turn_count, json.dumps(tau_traj), json.dumps(combined_scores),
+                     confidence, int(detected), crescendo_turn, now, session_id, did))
+            else:
+                conn.execute("""INSERT INTO sessions(session_id,deployment_id,model_version,turn_count,
+                    tau_trajectory,combined_scores,crescendo_confidence,crescendo_detected,crescendo_turn,created_at,updated_at)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                    (session_id, did, version, turn_count, json.dumps(tau_traj), json.dumps(combined_scores),
+                     confidence, int(detected), crescendo_turn, now, now))
+            conn.commit(); conn.close()
     except Exception as e: print(f"[DB] save_session: {e}")
 
 def get_sessions(did, limit=20):
     try:
-        conn = sqlite3.connect(DB_PATH)
-        rows = conn.execute("""SELECT session_id, turn_count, tau_trajectory, combined_scores,
-            crescendo_confidence, crescendo_detected, crescendo_turn, created_at, updated_at
-            FROM sessions WHERE deployment_id=? ORDER BY updated_at DESC LIMIT ?""", (did, limit)).fetchall()
-        conn.close()
+        if _USE_PG:
+            conn = _pg_connect()
+            cur = conn.cursor()
+            cur.execute("""SELECT session_id, turn_count, tau_trajectory, combined_scores,
+                crescendo_confidence, crescendo_detected, crescendo_turn, created_at, updated_at
+                FROM sessions WHERE deployment_id=%s ORDER BY updated_at DESC LIMIT %s""", (did, limit))
+            rows = cur.fetchall()
+            cur.close(); conn.close()
+        else:
+            conn = sqlite3.connect(DB_PATH)
+            rows = conn.execute("""SELECT session_id, turn_count, tau_trajectory, combined_scores,
+                crescendo_confidence, crescendo_detected, crescendo_turn, created_at, updated_at
+                FROM sessions WHERE deployment_id=? ORDER BY updated_at DESC LIMIT ?""", (did, limit)).fetchall()
+            conn.close()
         return [{"session_id": r[0], "turn_count": r[1],
                  "tau_trajectory": json.loads(r[2] or '[]'),
                  "combined_scores": json.loads(r[3] or '[]'),
@@ -1426,14 +1470,26 @@ def get_traces(did, version=None, limit=50):
 
 def get_cost_summary(did, version=None):
     try:
-        conn = sqlite3.connect(DB_PATH)
-        if version:
-            row = conn.execute("SELECT SUM(cost_usd),SUM(input_tokens),SUM(output_tokens),AVG(latency_ms),COUNT(*),SUM(input_tokens+output_tokens) FROM traces WHERE deployment_id=? AND model_version=?",
-                (did, version)).fetchone()
+        if _USE_PG:
+            conn = _pg_connect()
+            cur = conn.cursor()
+            if version:
+                cur.execute("SELECT SUM(cost_usd),SUM(input_tokens),SUM(output_tokens),AVG(latency_ms),COUNT(*),SUM(input_tokens+output_tokens) FROM traces WHERE deployment_id=%s AND model_version=%s",
+                    (did, version))
+            else:
+                cur.execute("SELECT SUM(cost_usd),SUM(input_tokens),SUM(output_tokens),AVG(latency_ms),COUNT(*),SUM(input_tokens+output_tokens) FROM traces WHERE deployment_id=%s",
+                    (did,))
+            row = cur.fetchone()
+            cur.close(); conn.close()
         else:
-            row = conn.execute("SELECT SUM(cost_usd),SUM(input_tokens),SUM(output_tokens),AVG(latency_ms),COUNT(*),SUM(input_tokens+output_tokens) FROM traces WHERE deployment_id=?",
-                (did,)).fetchone()
-        conn.close()
+            conn = sqlite3.connect(DB_PATH)
+            if version:
+                row = conn.execute("SELECT SUM(cost_usd),SUM(input_tokens),SUM(output_tokens),AVG(latency_ms),COUNT(*),SUM(input_tokens+output_tokens) FROM traces WHERE deployment_id=? AND model_version=?",
+                    (did, version)).fetchone()
+            else:
+                row = conn.execute("SELECT SUM(cost_usd),SUM(input_tokens),SUM(output_tokens),AVG(latency_ms),COUNT(*),SUM(input_tokens+output_tokens) FROM traces WHERE deployment_id=?",
+                    (did,)).fetchone()
+            conn.close()
         if row and row[0] is not None:
             return {"total_cost_usd": round(row[0], 6), "input_tokens": row[1] or 0,
                     "output_tokens": row[2] or 0, "avg_latency_ms": round(row[3], 1) if row[3] else 0,
@@ -2120,6 +2176,10 @@ def _load_all_from_db():
 
 @asynccontextmanager
 async def lifespan(app):
+    if _USE_PG:
+        print(f'[DB] Using Postgres: {_PG_URL[:30]}...')
+    else:
+        print(f'[DB] Using SQLite: {DB_PATH}')
     init_db(); _load_all_from_db(); get_embed_model()
     import threading
     threading.Thread(target=_build_geo_centroid, daemon=True).start()
