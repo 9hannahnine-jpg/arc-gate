@@ -1278,6 +1278,7 @@ def save_regression_comparison(did, v_from, v_to, result):
 
 def save_trace(did, version, req_id, prompt, response, in_tok, out_tok, latency_ms, cost, status, fr_z, ts, mahal_score=0.0):
     print(f'[DB_DEBUG] save_trace did={did} req_id={req_id} DB_PATH={DB_PATH}')
+    init_db()  # ensure tables exist
     try:
         conn = sqlite3.connect(DB_PATH)
         conn.execute("INSERT INTO traces(deployment_id,model_version,request_id,prompt,response,input_tokens,output_tokens,latency_ms,cost_usd,drift_status,fr_z,mahal_score,timestamp) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -1329,7 +1330,11 @@ def get_traces(did, version=None, limit=50):
                  "latency_ms": round(r[5], 1) if r[5] else 0,
                  "cost_usd": r[6], "drift_status": r[7], "fr_z": r[8], "timestamp": r[9]}
                 for r in rows]
-    except: return []
+    except Exception as e:
+        print(f'[DB] get_traces ERROR: {e}')
+        import traceback
+        print(traceback.format_exc())
+        return []
 
 def get_cost_summary(did, version=None):
     try:
