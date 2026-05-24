@@ -1284,6 +1284,18 @@ def save_trace(did, version, req_id, prompt, response, in_tok, out_tok, latency_
         conn.commit(); conn.close()
     except Exception as e: print("[DB] save_trace: " + str(e))
 
+def update_trace_status(request_id, drift_status, fr_z):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute(
+            'UPDATE traces SET drift_status=?, fr_z=? WHERE request_id=?',
+            (drift_status, fr_z, request_id)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f'[DB] update_trace_status: {e}')
+
 def get_drift_history(did, version=None, limit=20):
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -2937,13 +2949,55 @@ async def proxy(request: Request, path: str,
         usage = rb.get("usage") or {}
         in_tok = usage.get("prompt_tokens", 0); out_tok = usage.get("completion_tokens", 0)
         cost = calc_cost(body_dict.get("model", "") if is_json else "", in_tok, out_tok)
+
+        def _save_session_snapshot(tau_value=None, combined_score=0.0, update_last=False):
+            if not session_id:
+                return
+            try:
+                _existing = get_sessions(did, limit=100)
+                _sess = next((s for s in _existing if s['session_id'] == session_id), None)
+                _tau_traj = list(_sess['tau_trajectory']) if _sess else []
+                _scores = list(_sess['combined_scores']) if _sess else []
+                _turn = _sess['turn_count'] if _sess else 0
+                if update_last and _tau_traj:
+                    _tau_traj[-1] = tau_value
+                    if _scores:
+                        _scores[-1] = combined_score
+                    else:
+                        _scores.append(combined_score)
+                else:
+                    _turn += 1
+                    _tau_traj.append(tau_value)
+                    _scores.append(combined_score)
+                _cres_conf = 0.0
+                _cres_detected = _sess['crescendo_detected'] if _sess else False
+                _cres_turn = _sess['crescendo_turn'] if _sess else 0
+                _numeric_tau = [t for t in _tau_traj if isinstance(t, (int, float))]
+                if len(_numeric_tau) >= 2:
+                    _below_tau = sum(1 for t in _numeric_tau if t < 1.2247)
+                    _dropping = sum(1 for i in range(1, len(_numeric_tau)) if _numeric_tau[i] < _numeric_tau[i-1])
+                    _cres_conf = (_below_tau + _dropping) / (2 * len(_numeric_tau))
+                    if _cres_conf > 0.4 and not _cres_detected and _below_tau >= 2:
+                        _cres_detected = True
+                        _cres_turn = _turn
+                print(f"[SESSION] Saving session {session_id} turn {_turn} scores {_scores}")
+                save_session(session_id, did, version, _turn, _tau_traj, _scores, _cres_conf, _cres_detected, _cres_turn)
+                print("[SESSION] Saved ok")
+            except Exception as _sess_e:
+                print(f"[SESSION] save snapshot error: {_sess_e}")
+
+        save_trace(did, version, req_id, prompt, response, in_tok, out_tok, latency_ms, cost, "not_computed", 0.0, rt)
+        _save_session_snapshot(None, 0.0, update_last=False)
+
+        _sync_observed = False
         async def _monitor():
             try:
                 if _sync_observed:
                     return  # observe() already called synchronously
+                if not lp:
+                    return
                 with state._obs_lock:
-                    pre_dist = response_to_dist(response) if lp is None and response else None
-                    result = observe(state, lp, rt, pre_dist=pre_dist)
+                    result = observe(state, lp, rt)
                 status = result.get("status", ""); step = result.get("step", 0); fz = result.get("fr_z", 0); _tau_est = result.get("tau_est", 1.2247)
                 import math as _math2
                 _prompt_len2 = len(prompt) if prompt else 10
@@ -2956,30 +3010,8 @@ async def proxy(request: Request, path: str,
                     req_status2 = "elevated"
                 else:
                     req_status2 = "stable"
-                save_trace(did, version, req_id, prompt, response, in_tok, out_tok, latency_ms, cost, req_status2, fz, rt)
-                if session_id:
-                    _existing2 = get_sessions(did, limit=100)
-                    _sess2 = next((s for s in _existing2 if s['session_id'] == session_id), None)
-                    _tau_traj2 = _sess2['tau_trajectory'] if _sess2 else []
-                    _scores2 = _sess2['combined_scores'] if _sess2 else []
-                    _turn2 = (_sess2['turn_count'] if _sess2 else 0) + 1
-                    _tau_traj2.append(round(_tau_est, 4))
-                    _scores2.append(round(_combined2, 4))
-                    _cres_conf2 = 0.0
-                    _cres_detected2 = _sess2['crescendo_detected'] if _sess2 else False
-                    _cres_turn2 = _sess2['crescendo_turn'] if _sess2 else 0
-                    if len(_tau_traj2) >= 2:
-                        # Crescendo signal: tau dropping toward/below tau* = 1.2247
-                        TAU_STAR = 1.2247
-                        _below_tau = sum(1 for t in _tau_traj2 if t < TAU_STAR)
-                        _dropping = sum(1 for i in range(1, len(_tau_traj2)) if _tau_traj2[i] < _tau_traj2[i-1])
-                        _cres_conf2 = (_below_tau + _dropping) / (2 * len(_tau_traj2))
-                        if _cres_conf2 > 0.4 and not _cres_detected2 and _below_tau >= 2:
-                            _cres_detected2 = True
-                            _cres_turn2 = _turn2
-                    print(f"[SESSION] Saving session {session_id} turn {_turn2} scores {_scores2}")
-                    save_session(session_id, did, version, _turn2, _tau_traj2, _scores2, _cres_conf2, _cres_detected2, _cres_turn2)
-                    print(f"[SESSION] Saved ok")
+                update_trace_status(req_id, req_status2, fz)
+                _save_session_snapshot(round(_tau_est, 4), round(_combined2, 4), update_last=True)
                 run_assertions(did, version, req_id, {"prompt": prompt, "response": response,
                     "input_tokens": in_tok, "output_tokens": out_tok, "latency_ms": latency_ms,
                     "cost_usd": cost, "drift_status": status, "fr_z": fz,
@@ -3065,18 +3097,16 @@ async def proxy(request: Request, path: str,
                 print(f"[ARC_SENTRY] allowed injection failed: {_ae}")
     _sync_observed = False
     # ── Synchronous geometric block (response-side FR-Z) ──────────────────
-    if is_inf and rb:
+    if is_inf and rb and lp:
         try:
             import math as _sync_math
             with state._obs_lock:
-                _sync_pre = response_to_dist(response) if lp is None and response else None
-                _sync_result = observe(state, lp, rt, pre_dist=_sync_pre)
+                _sync_result = observe(state, lp, rt)
             _sync_fz = _sync_result.get("fr_z", 0)
             _sync_step = _sync_result.get("step", 0)
             _sync_plen = len(prompt) if prompt else 10
             _sync_combined = _sync_fz * _sync_math.log(max(_sync_plen, 10)) / _sync_math.log(50)
             _sync_observed = True
-            # Save trace from sync block since _monitor() will skip if _sync_observed
             import math as _sync_math2
             _sync_plen2 = len(prompt) if prompt else 10
             _sync_combined2 = _sync_fz * _sync_math.log(max(_sync_plen2, 10)) / _sync_math.log(50)
@@ -3088,7 +3118,8 @@ async def proxy(request: Request, path: str,
                 _sync_req_status = "elevated"
             else:
                 _sync_req_status = "stable"
-            save_trace(did, version, req_id, prompt, response, in_tok, out_tok, latency_ms, cost, _sync_req_status, _sync_fz, rt)
+            update_trace_status(req_id, _sync_req_status, _sync_fz)
+            _save_session_snapshot(_sync_result.get("tau_est", 1.2247), round(_sync_combined2, 4), update_last=True)
             if _sync_step > 10 and _sync_combined > 4.5:
                 import json as _json
                 return JSONResponse(status_code=200, content={
