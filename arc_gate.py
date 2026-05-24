@@ -1432,7 +1432,7 @@ def get_drift_history(did, version=None, limit=20):
     except: return []
 
 def get_traces(did, version=None, limit=50):
-    print(f'[DB_DEBUG] get_traces did={did} DB_PATH={DB_PATH}')
+    print(f'[DB_DEBUG] get_traces did={did} backend={"postgres" if _USE_PG else "sqlite"} _USE_PG={_USE_PG}')
     try:
         if _USE_PG:
             conn = _pg_connect()
