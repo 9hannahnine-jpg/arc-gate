@@ -14,6 +14,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, JSONResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.security import APIKeyHeader as _APIKeyHeader
 
+_PG_URL = os.environ.get('DATABASE_URL', '')
+_USE_PG = bool(_PG_URL)
+if _USE_PG:
+    import psycopg2
+    import psycopg2.extras
+
 UPSTREAM_URL        = os.environ.get("GATE_UPSTREAM", "http://localhost:8000")
 WARMUP_STEPS        = int(os.environ.get("GATE_WARMUP", "3"))
 VOCAB_SIZE          = 50000
@@ -1058,7 +1064,34 @@ def calc_cost(model, in_tok, out_tok):
     c = COST_TABLE[key]
     return round((in_tok * c["in"] + out_tok * c["out"]) / 1_000_000, 8)
 
-def init_db():
+def _pg_connect():
+    return psycopg2.connect(_PG_URL)
+
+def _init_pg_db():
+    conn = _pg_connect()
+    cur = conn.cursor()
+    cur.execute("""CREATE TABLE IF NOT EXISTS traces (
+        id SERIAL PRIMARY KEY,
+        deployment_id TEXT,
+        model_version TEXT,
+        request_id TEXT,
+        prompt TEXT,
+        response TEXT,
+        input_tokens INTEGER,
+        output_tokens INTEGER,
+        latency_ms REAL,
+        cost_usd REAL,
+        drift_status TEXT,
+        fr_z REAL,
+        mahal_score REAL DEFAULT 0.0,
+        timestamp REAL
+    )""")
+    conn.commit()
+    cur.close()
+    conn.close()
+    print("[DB] Ready: Postgres traces")
+
+def _init_sqlite_db():
     conn = sqlite3.connect(DB_PATH)
     conn.execute("""CREATE TABLE IF NOT EXISTS deployment_state(
         deployment_id TEXT, model_version TEXT, state_blob BLOB,
@@ -1117,6 +1150,11 @@ def init_db():
         created_at REAL, updated_at REAL)""")
     conn.commit(); conn.close()
     print("[DB] Ready: " + DB_PATH)
+
+def init_db():
+    if _USE_PG:
+        _init_pg_db()
+    _init_sqlite_db()
 
 def _state_to_json(state):
     def _safe(v):
@@ -1278,28 +1316,49 @@ def save_regression_comparison(did, v_from, v_to, result):
 
 def save_trace(did, version, req_id, prompt, response, in_tok, out_tok, latency_ms, cost, status, fr_z, ts, mahal_score=0.0):
     print(f'[DB_DEBUG] save_trace did={did} req_id={req_id} DB_PATH={DB_PATH}')
-    init_db()  # ensure tables exist BEFORE the try block
     try:
-        conn = sqlite3.connect(DB_PATH)
-        conn.execute('PRAGMA journal_mode=WAL')
-        conn.execute("INSERT INTO traces(deployment_id,model_version,request_id,prompt,response,input_tokens,output_tokens,latency_ms,cost_usd,drift_status,fr_z,mahal_score,timestamp) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (did, version, req_id, prompt[:500], response[:500], in_tok, out_tok, latency_ms, cost, status, fr_z, mahal_score, ts))
-        conn.commit()
-        conn.execute('PRAGMA wal_checkpoint(FULL)')
-        conn.close()
+        if _USE_PG:
+            conn = _pg_connect()
+            cur = conn.cursor()
+            cur.execute(
+                "INSERT INTO traces(deployment_id,model_version,request_id,prompt,response,input_tokens,output_tokens,latency_ms,cost_usd,drift_status,fr_z,mahal_score,timestamp) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                (did, version, req_id, prompt[:500], response[:500], in_tok, out_tok, latency_ms, cost, status, fr_z, mahal_score, ts)
+            )
+            conn.commit()
+            cur.close()
+            conn.close()
+        else:
+            conn = sqlite3.connect(DB_PATH)
+            conn.execute('PRAGMA journal_mode=WAL')
+            conn.execute("INSERT INTO traces(deployment_id,model_version,request_id,prompt,response,input_tokens,output_tokens,latency_ms,cost_usd,drift_status,fr_z,mahal_score,timestamp) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (did, version, req_id, prompt[:500], response[:500], in_tok, out_tok, latency_ms, cost, status, fr_z, mahal_score, ts))
+            conn.commit()
+            conn.execute('PRAGMA wal_checkpoint(FULL)')
+            conn.close()
         print(f'[DB_DEBUG] save_trace committed ok req_id={req_id}')
     except Exception as e:
         print(f'[DB] save_trace ERROR: {e}')
 
 def update_trace_status(request_id, drift_status, fr_z):
     try:
-        conn = sqlite3.connect(DB_PATH)
-        conn.execute(
-            'UPDATE traces SET drift_status=?, fr_z=? WHERE request_id=?',
-            (drift_status, fr_z, request_id)
-        )
-        conn.commit()
-        conn.close()
+        if _USE_PG:
+            conn = _pg_connect()
+            cur = conn.cursor()
+            cur.execute(
+                'UPDATE traces SET drift_status=%s, fr_z=%s WHERE request_id=%s',
+                (drift_status, fr_z, request_id)
+            )
+            conn.commit()
+            cur.close()
+            conn.close()
+        else:
+            conn = sqlite3.connect(DB_PATH)
+            conn.execute(
+                'UPDATE traces SET drift_status=?, fr_z=? WHERE request_id=?',
+                (drift_status, fr_z, request_id)
+            )
+            conn.commit()
+            conn.close()
     except Exception as e:
         print(f'[DB] update_trace_status: {e}')
 
@@ -1321,16 +1380,29 @@ def get_drift_history(did, version=None, limit=20):
 def get_traces(did, version=None, limit=50):
     print(f'[DB_DEBUG] get_traces did={did} DB_PATH={DB_PATH}')
     try:
-        conn = sqlite3.connect(DB_PATH)
-        conn.execute('PRAGMA journal_mode=WAL')
-        if version:
-            rows = conn.execute("SELECT request_id,prompt,response,input_tokens,output_tokens,latency_ms,cost_usd,drift_status,fr_z,timestamp FROM traces WHERE deployment_id=? AND model_version=? ORDER BY timestamp DESC LIMIT ?",
-                (did, version, limit)).fetchall()
+        if _USE_PG:
+            conn = _pg_connect()
+            cur = conn.cursor()
+            if version:
+                cur.execute("SELECT request_id,prompt,response,input_tokens,output_tokens,latency_ms,cost_usd,drift_status,fr_z,timestamp FROM traces WHERE deployment_id=%s AND model_version=%s ORDER BY timestamp DESC LIMIT %s",
+                    (did, version, limit))
+            else:
+                cur.execute("SELECT request_id,prompt,response,input_tokens,output_tokens,latency_ms,cost_usd,drift_status,fr_z,timestamp FROM traces WHERE deployment_id=%s ORDER BY timestamp DESC LIMIT %s",
+                    (did, limit))
+            rows = cur.fetchall()
+            cur.close()
+            conn.close()
         else:
-            rows = conn.execute("SELECT request_id,prompt,response,input_tokens,output_tokens,latency_ms,cost_usd,drift_status,fr_z,timestamp FROM traces WHERE deployment_id=? ORDER BY timestamp DESC LIMIT ?",
-                (did, limit)).fetchall()
+            conn = sqlite3.connect(DB_PATH)
+            conn.execute('PRAGMA journal_mode=WAL')
+            if version:
+                rows = conn.execute("SELECT request_id,prompt,response,input_tokens,output_tokens,latency_ms,cost_usd,drift_status,fr_z,timestamp FROM traces WHERE deployment_id=? AND model_version=? ORDER BY timestamp DESC LIMIT ?",
+                    (did, version, limit)).fetchall()
+            else:
+                rows = conn.execute("SELECT request_id,prompt,response,input_tokens,output_tokens,latency_ms,cost_usd,drift_status,fr_z,timestamp FROM traces WHERE deployment_id=? ORDER BY timestamp DESC LIMIT ?",
+                    (did, limit)).fetchall()
+            conn.close()
         print(f'[DB_DEBUG] get_traces returned {len(rows)} rows')
-        conn.close()
         return [{"request_id": r[0], "prompt": r[1], "response": r[2],
                  "input_tokens": r[3], "output_tokens": r[4],
                  "latency_ms": round(r[5], 1) if r[5] else 0,
