@@ -15,7 +15,7 @@ from fastapi.responses import Response, JSONResponse, HTMLResponse, RedirectResp
 from fastapi.security import APIKeyHeader as _APIKeyHeader
 
 UPSTREAM_URL        = os.environ.get("GATE_UPSTREAM", "http://localhost:8000")
-WARMUP_STEPS        = int(os.environ.get("GATE_WARMUP", "10"))
+WARMUP_STEPS        = int(os.environ.get("GATE_WARMUP", "3"))
 VOCAB_SIZE          = 50000
 REQUEST_TIMEOUT     = 60.0
 RECAL_LAMBDA_FLOOR  = float(os.environ.get("GATE_LAMBDA_FLOOR", "4.00"))
