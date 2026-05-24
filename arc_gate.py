@@ -1277,6 +1277,7 @@ def save_regression_comparison(did, v_from, v_to, result):
     except Exception as e: print("[DB] save_regression: " + str(e))
 
 def save_trace(did, version, req_id, prompt, response, in_tok, out_tok, latency_ms, cost, status, fr_z, ts, mahal_score=0.0):
+    print(f'[DB_DEBUG] save_trace did={did} req_id={req_id} DB_PATH={DB_PATH}')
     try:
         conn = sqlite3.connect(DB_PATH)
         conn.execute("INSERT INTO traces(deployment_id,model_version,request_id,prompt,response,input_tokens,output_tokens,latency_ms,cost_usd,drift_status,fr_z,mahal_score,timestamp) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -1312,6 +1313,7 @@ def get_drift_history(did, version=None, limit=20):
     except: return []
 
 def get_traces(did, version=None, limit=50):
+    print(f'[DB_DEBUG] get_traces did={did} DB_PATH={DB_PATH}')
     try:
         conn = sqlite3.connect(DB_PATH)
         if version:
@@ -1320,6 +1322,7 @@ def get_traces(did, version=None, limit=50):
         else:
             rows = conn.execute("SELECT request_id,prompt,response,input_tokens,output_tokens,latency_ms,cost_usd,drift_status,fr_z,timestamp FROM traces WHERE deployment_id=? ORDER BY timestamp DESC LIMIT ?",
                 (did, limit)).fetchall()
+        print(f'[DB_DEBUG] get_traces returned {len(rows)} rows')
         conn.close()
         return [{"request_id": r[0], "prompt": r[1], "response": r[2],
                  "input_tokens": r[3], "output_tokens": r[4],
