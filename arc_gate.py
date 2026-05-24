@@ -2250,7 +2250,7 @@ async def list_deployments(auth=Depends(auth)):
     return {"deployments": result, "total": len(result)}
 
 @app.get("/sentry/deployments/{deployment_id}")
-async def deployment_detail(deployment_id: str, model_version: str = "default", auth=Depends(auth)):
+async def deployment_detail(deployment_id: str, model_version: str = None, auth=Depends(auth)):
     s = store.get(deployment_id, model_version)
     if s is None: s = load_state(deployment_id, model_version)
     if s is None: return JSONResponse(status_code=404, content={"error": "not found"})
