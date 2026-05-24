@@ -1281,9 +1281,11 @@ def save_trace(did, version, req_id, prompt, response, in_tok, out_tok, latency_
     init_db()  # ensure tables exist BEFORE the try block
     try:
         conn = sqlite3.connect(DB_PATH)
+        conn.execute('PRAGMA journal_mode=WAL')
         conn.execute("INSERT INTO traces(deployment_id,model_version,request_id,prompt,response,input_tokens,output_tokens,latency_ms,cost_usd,drift_status,fr_z,mahal_score,timestamp) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (did, version, req_id, prompt[:500], response[:500], in_tok, out_tok, latency_ms, cost, status, fr_z, mahal_score, ts))
         conn.commit()
+        conn.execute('PRAGMA wal_checkpoint(FULL)')
         conn.close()
         print(f'[DB_DEBUG] save_trace committed ok req_id={req_id}')
     except Exception as e:
@@ -1320,6 +1322,7 @@ def get_traces(did, version=None, limit=50):
     print(f'[DB_DEBUG] get_traces did={did} DB_PATH={DB_PATH}')
     try:
         conn = sqlite3.connect(DB_PATH)
+        conn.execute('PRAGMA journal_mode=WAL')
         if version:
             rows = conn.execute("SELECT request_id,prompt,response,input_tokens,output_tokens,latency_ms,cost_usd,drift_status,fr_z,timestamp FROM traces WHERE deployment_id=? AND model_version=? ORDER BY timestamp DESC LIMIT ?",
                 (did, version, limit)).fetchall()
