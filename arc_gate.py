@@ -1278,13 +1278,16 @@ def save_regression_comparison(did, v_from, v_to, result):
 
 def save_trace(did, version, req_id, prompt, response, in_tok, out_tok, latency_ms, cost, status, fr_z, ts, mahal_score=0.0):
     print(f'[DB_DEBUG] save_trace did={did} req_id={req_id} DB_PATH={DB_PATH}')
-    init_db()  # ensure tables exist
+    init_db()  # ensure tables exist BEFORE the try block
     try:
         conn = sqlite3.connect(DB_PATH)
         conn.execute("INSERT INTO traces(deployment_id,model_version,request_id,prompt,response,input_tokens,output_tokens,latency_ms,cost_usd,drift_status,fr_z,mahal_score,timestamp) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (did, version, req_id, prompt[:500], response[:500], in_tok, out_tok, latency_ms, cost, status, fr_z, mahal_score, ts))
-        conn.commit(); conn.close()
-    except Exception as e: print("[DB] save_trace: " + str(e))
+        conn.commit()
+        conn.close()
+        print(f'[DB_DEBUG] save_trace committed ok req_id={req_id}')
+    except Exception as e:
+        print(f'[DB] save_trace ERROR: {e}')
 
 def update_trace_status(request_id, drift_status, fr_z):
     try:
