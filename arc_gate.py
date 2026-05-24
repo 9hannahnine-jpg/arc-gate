@@ -2949,6 +2949,7 @@ async def proxy(request: Request, path: str,
         usage = rb.get("usage") or {}
         in_tok = usage.get("prompt_tokens", 0); out_tok = usage.get("completion_tokens", 0)
         cost = calc_cost(body_dict.get("model", "") if is_json else "", in_tok, out_tok)
+        save_trace(did, version, req_id, prompt, response, in_tok, out_tok, latency_ms, cost, "not_computed", 0.0, rt)
 
         def _save_session_snapshot(tau_value=None, combined_score=0.0, update_last=False):
             if not session_id:
@@ -2986,7 +2987,6 @@ async def proxy(request: Request, path: str,
             except Exception as _sess_e:
                 print(f"[SESSION] save snapshot error: {_sess_e}")
 
-        save_trace(did, version, req_id, prompt, response, in_tok, out_tok, latency_ms, cost, "not_computed", 0.0, rt)
         _save_session_snapshot(None, 0.0, update_last=False)
 
         _sync_observed = False
