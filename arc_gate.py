@@ -1369,7 +1369,7 @@ def save_regression_comparison(did, v_from, v_to, result):
     except Exception as e: print("[DB] save_regression: " + str(e))
 
 def save_trace(did, version, req_id, prompt, response, in_tok, out_tok, latency_ms, cost, status, fr_z, ts, mahal_score=0.0):
-    print(f'[DB_DEBUG] save_trace did={did} req_id={req_id} DB_PATH={DB_PATH}')
+    print(f'[DB_DEBUG] save_trace did={did} req_id={req_id} backend={"postgres" if _USE_PG else "sqlite"} _USE_PG={_USE_PG}')
     try:
         if _USE_PG:
             conn = _pg_connect()
