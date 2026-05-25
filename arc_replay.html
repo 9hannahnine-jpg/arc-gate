@@ -3,282 +3,381 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Arc Replay — Session Explorer</title>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<title>Arc Gate — Session Replay</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-body{background:#0d1117;color:#e6edf3;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:14px;}
-input,select,button{font-family:inherit;}
-::-webkit-scrollbar{width:6px;height:6px;}
-::-webkit-scrollbar-track{background:#0d1117;}
-::-webkit-scrollbar-thumb{background:#30363d;border-radius:3px;}
+:root{
+--bg:#0d1117;--bg2:#161b22;--bg3:#1c2128;
+--b1:#21262d;--b2:#30363d;
+--t1:#e6edf3;--t2:#8b949e;--t3:#484f58;
+--ac:#79c0ff;--ok:#2ea043;--warn:#d29922;--danger:#f85149;--purple:#bc8cff;
+}
+body{background:var(--bg);color:var(--t1);font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:13px;line-height:1.5;min-height:100vh;}
+*{scrollbar-width:thin;scrollbar-color:var(--b2) transparent;}
+a{color:inherit;text-decoration:none;}
+button,input,select{font-family:inherit;font-size:inherit;}
+.mono{font-family:'IBM Plex Mono',monospace;}
+.label{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--t3);}
+
+/* Connect screen */
+#connect{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;}
+.connect-box{width:100%;max-width:440px;border:1px solid var(--b2);background:var(--bg2);padding:40px;}
+.connect-box h1{font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:600;margin-bottom:6px;}
+.connect-box p{font-size:13px;color:var(--t2);margin-bottom:32px;line-height:1.7;}
+.field{margin-bottom:16px;}
+.field label{display:block;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--t3);margin-bottom:6px;}
+.field input{width:100%;background:var(--bg3);border:1px solid var(--b2);color:var(--t1);padding:9px 12px;outline:none;font-family:'IBM Plex Mono',monospace;font-size:11px;}
+.field input:focus{border-color:var(--ac);}
+.btn-primary{width:100%;padding:10px;background:var(--ac);color:var(--bg);font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.06em;border:none;cursor:pointer;}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed;}
+.error-msg{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--danger);padding:8px 12px;border:1px solid var(--danger);margin-bottom:16px;}
+
+/* App shell */
+#app{display:none;flex-direction:column;min-height:100vh;}
+#topbar{display:flex;align-items:center;justify-content:space-between;height:50px;padding:0 24px;border-bottom:1px solid var(--b1);background:var(--bg2);position:sticky;top:0;z-index:40;gap:16px;}
+.topbar-left{display:flex;align-items:center;gap:20px;min-width:0;}
+.wordmark{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:.1em;white-space:nowrap;}
+.wordmark span{color:var(--ac);}
+.deploy-badge{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--t3);background:var(--bg3);border:1px solid var(--b1);padding:3px 8px;white-space:nowrap;}
+.topbar-right{display:flex;align-items:center;gap:12px;flex-shrink:0;}
+.stat-item{text-align:center;}
+.stat-item .stat-label{font-family:'IBM Plex Mono',monospace;font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);}
+.stat-item .stat-val{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--t2);margin-top:1px;}
+.btn-sm{background:none;border:1px solid var(--b2);color:var(--t2);font-family:'IBM Plex Mono',monospace;font-size:10px;padding:4px 10px;cursor:pointer;white-space:nowrap;}
+.btn-sm:hover{border-color:var(--ac);color:var(--ac);}
+
+/* Tabs */
+#tabbar{display:flex;border-bottom:1px solid var(--b1);background:var(--bg2);padding:0 24px;}
+.tab-btn{background:none;border:none;border-bottom:2px solid transparent;color:var(--t3);font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:11px 18px;cursor:pointer;transition:all .15s;}
+.tab-btn.active{border-bottom-color:var(--ac);color:var(--ac);}
+.tab-btn:hover:not(.active){color:var(--t2);}
+
+/* Table header */
+.tbl-hdr{display:grid;gap:12px;padding:7px 20px;border-bottom:1px solid var(--b1);background:var(--bg2);position:sticky;top:50px;z-index:30;}
+.tbl-hdr span{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);}
+
+/* Trace row */
+.trace-row{display:grid;gap:12px;padding:9px 20px;border-bottom:1px solid var(--b1);cursor:pointer;align-items:center;transition:background .1s;}
+.trace-row:hover{background:var(--bg2);}
+.trace-row.selected{background:var(--bg3);}
+.trace-prompt{font-size:12px;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.trace-time{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--t3);margin-top:2px;}
+.status-badge{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.08em;text-transform:uppercase;text-align:center;}
+.metric{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--t2);text-align:center;}
+
+/* Session row */
+.sess-row{display:grid;gap:16px;padding:12px 20px;border-bottom:1px solid var(--b1);align-items:center;cursor:pointer;transition:background .1s;}
+.sess-row:hover{background:var(--bg2);}
+
+/* Detail panel */
+#detail{position:fixed;top:0;right:0;bottom:0;width:460px;background:var(--bg2);border-left:1px solid var(--b2);overflow-y:auto;z-index:50;display:none;flex-direction:column;}
+#detail.open{display:flex;}
+#detail-hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--b1);position:sticky;top:0;background:var(--bg2);z-index:1;}
+#detail-body{padding:20px;flex:1;}
+.detail-section{margin-bottom:20px;}
+.detail-section-label{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--t3);margin-bottom:8px;}
+.detail-content{background:var(--bg3);border:1px solid var(--b1);padding:12px;font-size:12px;color:var(--t1);line-height:1.7;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto;}
+.metrics-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.metric-card{background:var(--bg3);border:1px solid var(--b1);padding:10px 12px;}
+.metric-card .mc-label{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);margin-bottom:4px;}
+.metric-card .mc-val{font-family:'IBM Plex Mono',monospace;font-size:15px;color:var(--ac);}
+
+/* Empty state */
+.empty{padding:60px 24px;text-align:center;}
+.empty p{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--t3);}
+
+/* Overview */
+.overview-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--b1);border:1px solid var(--b1);}
+.ov-card{background:var(--bg);padding:24px;}
+.ov-card .ov-label{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--t3);margin-bottom:10px;}
+.ov-card .ov-val{font-family:'IBM Plex Mono',monospace;font-size:26px;font-weight:600;line-height:1;}
+
+/* Status colors */
+.s-stable{color:var(--ok);}
+.s-block{color:var(--danger);}
+.s-warn{color:var(--warn);}
+.s-muted{color:var(--t3);}
+
+/* Tau sparkline */
+.sparkline-wrap{display:flex;align-items:center;}
 </style>
 </head>
 <body>
-<div id="root"></div>
-<script type="text/babel">
-const { useState, useEffect, useCallback } = React;
 
-const T = {
-  bg:"#0d1117",bg2:"#161b22",bg3:"#1c2128",
-  border:"#21262d",border2:"#30363d",
-  text:"#e6edf3",text2:"#8b949e",text3:"#484f58",
-  accent:"#79c0ff",accent2:"#58a6ff",
-  danger:"#f85149",warn:"#d29922",ok:"#2ea043",purple:"#bc8cff"
-};
-const mono="'IBM Plex Mono','Fira Code',monospace";
-const sans="'IBM Plex Sans',system-ui,sans-serif";
+<!-- Connect screen -->
+<div id="connect">
+  <div class="connect-box">
+    <div class="label" style="color:var(--ac);margin-bottom:10px;">Arc Gate</div>
+    <h1>Session Replay</h1>
+    <p>Inspect every request, decision, and blocked attack across your agent sessions.</p>
+    <div id="conn-error" class="error-msg" style="display:none;"></div>
+    <div class="field">
+      <label>Arc Gate URL</label>
+      <input type="text" id="conn-url" placeholder="https://your-instance.up.railway.app" autocomplete="off"/>
+    </div>
+    <div class="field">
+      <label>API Key</label>
+      <input type="password" id="conn-key" placeholder="ag-..." autocomplete="off"/>
+    </div>
+    <button class="btn-primary" id="conn-btn" onclick="connect()">Connect →</button>
+  </div>
+</div>
 
-class ReplayStore {
-  constructor(baseUrl,apiKey){
-    this.baseUrl=baseUrl.replace(/\/$/,"");
-    this.apiKey=apiKey;
-  }
-  async _get(path){
-    const r=await fetch(`${this.baseUrl}${path}`,{headers:{"X-Arc-Gate-Key":this.apiKey}});
-    if(!r.ok)throw new Error(`${r.status} ${r.statusText}`);
+<!-- App -->
+<div id="app">
+  <div id="topbar">
+    <div class="topbar-left">
+      <div class="wordmark">ARC<span>.</span>GATE</div>
+      <div class="deploy-badge" id="deploy-label">—</div>
+      <div style="display:flex;gap:20px;" id="topbar-stats"></div>
+    </div>
+    <div class="topbar-right">
+      <button class="btn-sm" onclick="loadData()">↺ Refresh</button>
+      <a href="/dashboard" class="btn-sm">← Dashboard</a>
+      <button class="btn-sm" onclick="disconnect()">Disconnect</button>
+    </div>
+  </div>
+
+  <div id="tabbar">
+    <button class="tab-btn active" onclick="switchTab('traces',this)">Traces</button>
+    <button class="tab-btn" onclick="switchTab('sessions',this)">Sessions</button>
+    <button class="tab-btn" onclick="switchTab('overview',this)">Overview</button>
+  </div>
+
+  <div id="tab-traces">
+    <div class="tbl-hdr" style="grid-template-columns:28px 1fr 90px 70px 60px 80px;">
+      <span>#</span><span>Prompt</span><span style="text-align:center;">Status</span>
+      <span style="text-align:center;">Latency</span><span style="text-align:center;">Tokens</span>
+      <span style="text-align:center;">Cost</span>
+    </div>
+    <div id="traces-body"></div>
+  </div>
+
+  <div id="tab-sessions" style="display:none;">
+    <div class="tbl-hdr" style="grid-template-columns:1fr 60px 70px 100px 160px;">
+      <span>Session</span><span style="text-align:center;">Turns</span>
+      <span style="text-align:center;">Risk</span><span style="text-align:center;">Status</span>
+      <span>τ Trajectory</span>
+    </div>
+    <div id="sessions-body"></div>
+  </div>
+
+  <div id="tab-overview" style="display:none;padding:24px;">
+    <div class="overview-grid" id="overview-grid"></div>
+  </div>
+</div>
+
+<!-- Detail panel -->
+<div id="detail">
+  <div id="detail-hdr">
+    <div class="mono" style="font-size:11px;color:var(--ac);letter-spacing:.1em;">TRACE DETAIL</div>
+    <button class="btn-sm" onclick="closeDetail()">ESC</button>
+  </div>
+  <div id="detail-body"></div>
+</div>
+
+<script>
+let _store=null, _traces=[], _sessions=[], _deployment=null, _selectedTrace=null;
+
+// ── Store ─────────────────────────────────────────────────────────────────────
+class Store{
+  constructor(url,key){this.url=url.replace(/\/$/,'');this.key=key;}
+  async get(path){
+    const r=await fetch(this.url+path,{headers:{'X-Arc-Gate-Key':this.key}});
+    if(!r.ok)throw new Error(r.status+' '+r.statusText);
     return r.json();
   }
-  async listDeployments(){const d=await this._get("/sentry/deployments");return d.deployments||[];}
-  async listSessions(did,limit=50){const d=await this._get(`/sentry/deployments/${did}/sessions?limit=${limit}`);return d.sessions||[];}
-  async listTraces(did,limit=100){const d=await this._get(`/sentry/deployments/${did}/traces?limit=${limit}`);return d.traces||[];}
-  async getDeployment(did){return this._get(`/sentry/deployments/${did}`);}
+  async deployments(){return(await this.get('/sentry/deployments')).deployments||[];}
+  async deployment(id){return this.get('/sentry/deployments/'+id);}
+  async traces(id,limit=200){return((await this.get('/sentry/deployments/'+id+'/traces?limit='+limit)).traces)||[];}
+  async sessions(id,limit=50){return((await this.get('/sentry/deployments/'+id+'/sessions?limit='+limit)).sessions)||[];}
 }
 
-const statusColor=s=>{if(!s)return T.text3;const sl=s.toLowerCase();if(sl.includes("block")||sl.includes("drift")||sl.includes("compromised"))return T.danger;if(sl.includes("restrict")||sl.includes("warn")||sl.includes("elevated"))return T.warn;if(sl.includes("stable")||sl.includes("allow")||sl.includes("ok"))return T.ok;return T.text3;};
-const statusIcon=s=>{if(!s)return"○";const sl=s.toLowerCase();if(sl.includes("block")||sl.includes("drift"))return"✕";if(sl.includes("restrict")||sl.includes("warn"))return"⚠";if(sl.includes("stable")||sl.includes("allow"))return"✓";return"○";};
-const fmtTs=ts=>{if(!ts)return"—";const d=new Date(ts*1000);return d.toLocaleString("en-US",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit"});};
-const fmtMs=ms=>ms?`${Math.round(ms)}ms`:"—";
-const fmtCost=c=>c?`$${Number(c).toFixed(6)}`:"—";
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const sc=s=>{if(!s)return'muted';const l=s.toLowerCase();if(l.includes('block')||l.includes('drift')||l.includes('compromised'))return'block';if(l.includes('restrict')||l.includes('warn')||l.includes('elevated'))return'warn';if(l.includes('stable')||l.includes('allow'))return'stable';return'muted';};
+const si=s=>{const m={block:'✕',warn:'⚠',stable:'✓',muted:'○'};return m[sc(s)]||'○';};
+const fts=ts=>{if(!ts)return'—';const d=new Date(ts*1000);return d.toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});};
+const fms=ms=>ms?Math.round(ms)+'ms':'—';
+const fco=c=>c?'$'+Number(c).toFixed(5):'—';
+const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-function TauChart({trajectory,width=200,height=48}){
-  if(!trajectory||trajectory.length<2)return React.createElement("span",{style:{fontFamily:mono,fontSize:10,color:T.text3}},"building...");
-  const TAU_STAR=1.2247;
-  const vals=trajectory.filter(v=>v!==null&&v!==undefined);
-  if(!vals.length)return null;
-  const min=Math.min(...vals,0);
-  const max=Math.max(...vals,TAU_STAR*1.2);
-  const range=max-min||1;
-  const pts=vals.map((v,i)=>{const x=(i/(vals.length-1))*width;const y=height-((v-min)/range)*height;return`${x},${y}`;}).join(" ");
-  const tauY=height-((TAU_STAR-min)/range)*height;
-  return React.createElement("svg",{width,height,style:{display:"block"}},
-    React.createElement("line",{x1:0,y1:tauY,x2:width,y2:tauY,stroke:T.warn,strokeWidth:1,strokeDasharray:"3,3",opacity:0.6}),
-    React.createElement("polyline",{points:pts,fill:"none",stroke:T.accent,strokeWidth:1.5}),
-    ...vals.map((v,i)=>{const x=(i/(vals.length-1))*width;const y=height-((v-min)/range)*height;return React.createElement("circle",{key:i,cx:x,cy:y,r:2.5,fill:v<TAU_STAR?T.danger:T.ok});})
-  );
+function sparkline(traj,w=150,h=30){
+  if(!traj||traj.length<2)return'<span style="font-family:\'IBM Plex Mono\',monospace;font-size:9px;color:var(--t3);">building...</span>';
+  const v=traj.filter(x=>x!=null);
+  if(!v.length)return'';
+  const TS=1.2247,mn=Math.min(...v,0),mx=Math.max(...v,TS*1.2),rng=mx-mn||1;
+  const pts=v.map((x,i)=>`${(i/(v.length-1))*w},${h-((x-mn)/rng)*h}`).join(' ');
+  const ty=h-((TS-mn)/rng)*h;
+  const dots=v.map((x,i)=>`<circle cx="${(i/(v.length-1))*w}" cy="${h-((x-mn)/rng)*h}" r="2.5" fill="${x<TS?'var(--danger)':'var(--ok)'}">`).join('');
+  return`<svg width="${w}" height="${h}" style="display:block;overflow:visible;"><line x1="0" y1="${ty}" x2="${w}" y2="${ty}" stroke="var(--warn)" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/><polyline points="${pts}" fill="none" stroke="var(--ac)" stroke-width="1.5"/>${dots}</svg>`;
 }
 
-function TraceDetail({trace,onClose}){
-  if(!trace)return null;
-  const color=statusColor(trace.drift_status);
-  return React.createElement("div",{style:{position:"fixed",top:0,right:0,bottom:0,width:480,background:T.bg2,borderLeft:`1px solid ${T.border2}`,overflowY:"auto",zIndex:100,display:"flex",flexDirection:"column"}},
-    React.createElement("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${T.border}`,position:"sticky",top:0,background:T.bg2,zIndex:1}},
-      React.createElement("div",{style:{fontFamily:mono,fontSize:11,color:T.accent,letterSpacing:"0.1em"}},"TRACE DETAIL"),
-      React.createElement("button",{onClick:onClose,style:{background:"none",border:`1px solid ${T.border2}`,color:T.text2,fontFamily:mono,fontSize:10,padding:"4px 10px",cursor:"pointer"}},"ESC")
-    ),
-    React.createElement("div",{style:{padding:20}},
-      React.createElement("div",{style:{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px",border:`1px solid ${color}`,marginBottom:20}},
-        React.createElement("span",{style:{fontFamily:mono,fontSize:10,color,letterSpacing:"0.1em",textTransform:"uppercase"}},`${statusIcon(trace.drift_status)} ${trace.drift_status||"unknown"}`)
-      ),
-      React.createElement("div",{style:{marginBottom:12}},
-        React.createElement("div",{style:{fontFamily:mono,fontSize:9,letterSpacing:"0.15em",textTransform:"uppercase",color:T.text3,marginBottom:4}},"REQUEST ID"),
-        React.createElement("div",{style:{fontFamily:mono,fontSize:11,color:T.text}},trace.request_id||"—")
-      ),
-      React.createElement("div",{style:{marginBottom:12}},
-        React.createElement("div",{style:{fontFamily:mono,fontSize:9,letterSpacing:"0.15em",textTransform:"uppercase",color:T.text3,marginBottom:4}},"TIMESTAMP"),
-        React.createElement("div",{style:{fontFamily:mono,fontSize:11,color:T.text}},fmtTs(trace.timestamp))
-      ),
-      React.createElement("div",{style:{borderTop:`1px solid ${T.border}`,paddingTop:16,marginBottom:16}},
-        React.createElement("div",{style:{fontFamily:mono,fontSize:9,letterSpacing:"0.15em",textTransform:"uppercase",color:T.text3,marginBottom:12}},"PROMPT"),
-        React.createElement("div",{style:{background:T.bg3,border:`1px solid ${T.border}`,padding:12,fontSize:12,color:T.text,lineHeight:1.7,fontFamily:sans,whiteSpace:"pre-wrap",wordBreak:"break-word"}},trace.prompt||"—")
-      ),
-      React.createElement("div",{style:{borderTop:`1px solid ${T.border}`,paddingTop:16,marginBottom:16}},
-        React.createElement("div",{style:{fontFamily:mono,fontSize:9,letterSpacing:"0.15em",textTransform:"uppercase",color:T.text3,marginBottom:12}},"RESPONSE"),
-        React.createElement("div",{style:{background:T.bg3,border:`1px solid ${T.border}`,padding:12,fontSize:12,color:T.text2,lineHeight:1.7,fontFamily:sans,whiteSpace:"pre-wrap",wordBreak:"break-word"}},trace.response||"—")
-      ),
-      React.createElement("div",{style:{borderTop:`1px solid ${T.border}`,paddingTop:16}},
-        React.createElement("div",{style:{fontFamily:mono,fontSize:9,letterSpacing:"0.15em",textTransform:"uppercase",color:T.text3,marginBottom:12}},"METRICS"),
-        React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}},
-          ...[["Latency",fmtMs(trace.latency_ms)],["Cost",fmtCost(trace.cost_usd)],["Input tokens",trace.input_tokens],["Output tokens",trace.output_tokens],["FR-Z",trace.fr_z?.toFixed?.(4)],].map(([label,value])=>
-            React.createElement("div",{key:label,style:{background:T.bg3,border:`1px solid ${T.border}`,padding:"10px 12px"}},
-              React.createElement("div",{style:{fontFamily:mono,fontSize:9,color:T.text3,marginBottom:4,letterSpacing:"0.1em",textTransform:"uppercase"}},label),
-              React.createElement("div",{style:{fontFamily:mono,fontSize:14,color:T.accent}},value||"—")
-            )
-          )
-        )
-      )
-    )
-  );
-}
-
-function App(){
-  const [config,setConfig]=useState({url:"",key:""});
-  const [connected,setConnected]=useState(false);
-  const [connecting,setConnecting]=useState(false);
-  const [error,setError]=useState(null);
-  const [store,setStore]=useState(null);
-  const [deployments,setDeployments]=useState([]);
-  const [selectedDeploy,setSelectedDeploy]=useState(null);
-  const [sessions,setSessions]=useState([]);
-  const [traces,setTraces]=useState([]);
-  const [deployment,setDeployment]=useState(null);
-  const [loading,setLoading]=useState(false);
-  const [tab,setTab]=useState("traces");
-  const [selectedTrace,setSelectedTrace]=useState(null);
-
-  // Auto-connect if URL params present
-  useEffect(()=>{
-    const params=new URLSearchParams(window.location.search);
-    const u=params.get("url")||window.location.origin;
-    const k=params.get("key")||"";
-    if(u&&k){setConfig({url:u,key:k});setTimeout(()=>connectWithConfig(u,k),100);}
-    else if(u){setConfig(c=>({...c,url:u}));}
-  },[]);
-
-  const connectWithConfig=async(url,key)=>{
-    setConnecting(true);setError(null);
-    try{
-      const s=new ReplayStore(url,key);
-      const deps=await s.listDeployments();
-      setStore(s);setDeployments(deps);setConnected(true);
-      if(deps.length>0)setSelectedDeploy(deps[0].deployment_id);
-    }catch(e){setError("Connection failed: "+e.message);}
-    setConnecting(false);
-  };
-
-  const connect=()=>connectWithConfig(config.url,config.key);
-
-  const loadData=useCallback(async()=>{
-    if(!store||!selectedDeploy)return;
-    setLoading(true);
-    try{
-      const [dep,sess,tr]=await Promise.all([store.getDeployment(selectedDeploy),store.listSessions(selectedDeploy),store.listTraces(selectedDeploy)]);
-      setDeployment(dep);setSessions(sess);setTraces(tr);
-    }catch(e){setError("Failed to load: "+e.message);}
-    setLoading(false);
-  },[store,selectedDeploy]);
-
-  useEffect(()=>{loadData();},[loadData]);
-
-  if(!connected){
-    return React.createElement("div",{style:{background:T.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}},
-      React.createElement("div",{style:{width:480,padding:40,border:`1px solid ${T.border2}`,background:T.bg2}},
-        React.createElement("div",{style:{fontFamily:mono,fontSize:11,letterSpacing:"0.2em",textTransform:"uppercase",color:T.accent,marginBottom:8}},"ARC REPLAY"),
-        React.createElement("div",{style:{fontFamily:mono,fontSize:22,fontWeight:600,color:T.text,marginBottom:8,lineHeight:1}},"Session Explorer"),
-        React.createElement("div",{style:{fontSize:13,color:T.text2,marginBottom:32,lineHeight:1.6}},"Connect to your Arc Gate instance to explore sessions, replay traces, and inspect governance decisions."),
-        ...[{label:"Arc Gate URL",placeholder:"https://your-arc-gate.up.railway.app",key:"url"},{label:"API Key",placeholder:"ag-...",key:"key",type:"password"}].map(({label,placeholder,key,type="text"})=>
-          React.createElement("div",{key,style:{marginBottom:16}},
-            React.createElement("div",{style:{fontFamily:mono,fontSize:9,letterSpacing:"0.15em",textTransform:"uppercase",color:T.text3,marginBottom:6}},label),
-            React.createElement("input",{type,placeholder,value:config[key],onChange:e=>setConfig(c=>({...c,[key]:e.target.value})),onKeyDown:e=>e.key==="Enter"&&connect(),style:{width:"100%",background:T.bg3,border:`1px solid ${T.border2}`,color:T.text,fontFamily:mono,fontSize:12,padding:"10px 12px",outline:"none",boxSizing:"border-box"}})
-          )
-        ),
-        error&&React.createElement("div",{style:{fontFamily:mono,fontSize:11,color:T.danger,marginBottom:16,padding:"8px 12px",border:`1px solid ${T.danger}`}},error),
-        React.createElement("button",{onClick:connect,disabled:connecting||!config.url||!config.key,style:{width:"100%",padding:"10px 0",background:T.accent,color:T.bg,fontFamily:mono,fontSize:11,fontWeight:600,letterSpacing:"0.08em",border:"none",cursor:"pointer",opacity:(connecting||!config.url||!config.key)?0.5:1}},connecting?"CONNECTING...":"CONNECT →")
-      )
-    );
+// ── Connect ───────────────────────────────────────────────────────────────────
+async function connect(){
+  const url=document.getElementById('conn-url').value.trim();
+  const key=document.getElementById('conn-key').value.trim();
+  if(!url||!key)return;
+  const btn=document.getElementById('conn-btn');
+  btn.disabled=true;btn.textContent='Connecting...';
+  document.getElementById('conn-error').style.display='none';
+  try{
+    _store=new Store(url,key);
+    const deps=await _store.deployments();
+    if(!deps.length)throw new Error('No deployments found');
+    const did=deps[0].deployment_id;
+    document.getElementById('deploy-label').textContent=did;
+    await loadDeployment(did);
+    document.getElementById('connect').style.display='none';
+    document.getElementById('app').style.display='flex';
+    document.getElementById('app').style.flexDirection='column';
+  }catch(e){
+    const el=document.getElementById('conn-error');
+    el.textContent='Connection failed: '+e.message;el.style.display='block';
+    _store=null;
   }
-
-  return React.createElement("div",{style:{background:T.bg,minHeight:"100vh",color:T.text}},
-    // Top bar
-    React.createElement("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 24px",height:52,borderBottom:`1px solid ${T.border}`,background:T.bg2,position:"sticky",top:0,zIndex:50}},
-      React.createElement("div",{style:{display:"flex",alignItems:"center",gap:20}},
-        React.createElement("div",{style:{fontFamily:mono,fontSize:12,fontWeight:600,letterSpacing:"0.12em",color:T.text}},
-          "ARC",React.createElement("span",{style:{color:T.accent}},"."),
-          React.createElement("span",{style:{color:T.text2,fontWeight:400}},"REPLAY — Session Explorer")
-        ),
-        deployments.length>1&&React.createElement("select",{value:selectedDeploy||"",onChange:e=>setSelectedDeploy(e.target.value),style:{background:T.bg3,border:`1px solid ${T.border2}`,color:T.text,fontFamily:mono,fontSize:11,padding:"4px 8px"}},
-          deployments.map(d=>React.createElement("option",{key:d.deployment_id,value:d.deployment_id},d.deployment_id))
-        ),
-        deployments.length===1&&React.createElement("span",{style:{fontFamily:mono,fontSize:11,color:T.text2}},selectedDeploy)
-      ),
-      React.createElement("div",{style:{display:"flex",alignItems:"center",gap:16}},
-        deployment&&React.createElement("div",{style:{display:"flex",gap:20}},
-          ...[{label:"REQUESTS",value:deployment.requests??0},{label:"ALERTS",value:deployment.alerts??0,color:deployment.alerts>0?T.danger:T.text2},{label:"STATUS",value:(deployment.status||"—").toUpperCase(),color:statusColor(deployment.status)}].map(({label,value,color})=>
-            React.createElement("div",{key:label,style:{textAlign:"center"}},
-              React.createElement("div",{style:{fontFamily:mono,fontSize:9,color:T.text3,letterSpacing:"0.12em"}},label),
-              React.createElement("div",{style:{fontFamily:mono,fontSize:13,color:color||T.text2,marginTop:1}},value)
-            )
-          )
-        ),
-        React.createElement("button",{onClick:loadData,style:{background:"none",border:`1px solid ${T.border2}`,color:T.text2,fontFamily:mono,fontSize:10,padding:"4px 10px",cursor:"pointer"}},loading?"...":"↺ REFRESH"),
-        React.createElement("a",{href:"/dashboard",style:{background:"none",border:`1px solid ${T.border2}`,color:T.text3,fontFamily:mono,fontSize:10,padding:"4px 10px",textDecoration:"none"}},"← DASHBOARD"),
-        React.createElement("button",{onClick:()=>setConnected(false),style:{background:"none",border:`1px solid ${T.border2}`,color:T.text3,fontFamily:mono,fontSize:10,padding:"4px 10px",cursor:"pointer"}},"DISCONNECT")
-      )
-    ),
-    // Tab bar
-    React.createElement("div",{style:{display:"flex",borderBottom:`1px solid ${T.border}`,background:T.bg2,padding:"0 24px"}},
-      ["traces","sessions","overview"].map(t=>
-        React.createElement("button",{key:t,onClick:()=>setTab(t),style:{background:"none",border:"none",borderBottom:`2px solid ${tab===t?T.accent:"transparent"}`,color:tab===t?T.accent:T.text3,fontFamily:mono,fontSize:10,letterSpacing:"0.12em",textTransform:"uppercase",padding:"12px 20px",cursor:"pointer"}},t)
-      )
-    ),
-    // Traces tab
-    tab==="traces"&&React.createElement("div",null,
-      React.createElement("div",{style:{display:"grid",gridTemplateColumns:"28px 1fr 80px 80px 80px 80px",gap:12,padding:"8px 20px",borderBottom:`1px solid ${T.border}`,background:T.bg2}},
-        ["#","Prompt","Status","Latency","Tokens","Cost"].map(h=>
-          React.createElement("div",{key:h,style:{fontFamily:mono,fontSize:9,letterSpacing:"0.12em",textTransform:"uppercase",color:T.text3,textAlign:h!=="Prompt"?"center":"left"}},h)
-        )
-      ),
-      traces.length>0?traces.map((t,i)=>
-        React.createElement("div",{key:t.request_id,onClick:()=>setSelectedTrace(s=>s?.request_id===t.request_id?null:t),style:{display:"grid",gridTemplateColumns:"28px 1fr 80px 80px 80px 80px",gap:12,padding:"10px 20px",borderBottom:`1px solid ${T.border}`,background:selectedTrace?.request_id===t.request_id?T.bg3:"transparent",cursor:"pointer",alignItems:"center"}},
-          React.createElement("div",{style:{fontFamily:mono,fontSize:10,color:T.text3,textAlign:"right"}},i+1),
-          React.createElement("div",null,
-            React.createElement("div",{style:{fontSize:12,color:T.text,marginBottom:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},t.prompt||"—"),
-            React.createElement("div",{style:{fontFamily:mono,fontSize:10,color:T.text3}},fmtTs(t.timestamp))
-          ),
-          React.createElement("div",{style:{fontFamily:mono,fontSize:11,color:statusColor(t.drift_status),textAlign:"center"}},`${statusIcon(t.drift_status)} ${t.drift_status||"—"}`),
-          React.createElement("div",{style:{fontFamily:mono,fontSize:11,color:T.text2,textAlign:"center"}},fmtMs(t.latency_ms)),
-          React.createElement("div",{style:{fontFamily:mono,fontSize:11,color:T.text2,textAlign:"center"}},(t.input_tokens||0)+(t.output_tokens||0)||"—"),
-          React.createElement("div",{style:{fontFamily:mono,fontSize:11,color:T.text3,textAlign:"center"}},fmtCost(t.cost_usd))
-        )
-      ):React.createElement("div",{style:{padding:"60px 24px",textAlign:"center"}},
-        React.createElement("div",{style:{fontFamily:mono,fontSize:13,color:T.text3}},"No traces recorded yet.")
-      )
-    ),
-    // Sessions tab
-    tab==="sessions"&&React.createElement("div",null,
-      React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 80px 80px 120px 180px",gap:16,padding:"8px 20px",borderBottom:`1px solid ${T.border}`,background:T.bg2}},
-        ["Session ID","Turns","Max Risk","Status","τ Trajectory"].map(h=>
-          React.createElement("div",{key:h,style:{fontFamily:mono,fontSize:9,letterSpacing:"0.12em",textTransform:"uppercase",color:T.text3}},h)
-        )
-      ),
-      sessions.length>0?sessions.map(s=>{
-        const maxRisk=s.combined_scores?.length?Math.max(...s.combined_scores.filter(Boolean)):0;
-        const hasAnomaly=s.crescendo_detected||maxRisk>2.0;
-        return React.createElement("div",{key:s.session_id,style:{display:"grid",gridTemplateColumns:"1fr 80px 80px 120px 180px",gap:16,padding:"12px 20px",borderBottom:`1px solid ${T.border}`,alignItems:"center",cursor:"pointer"}},
-          React.createElement("div",null,
-            React.createElement("div",{style:{fontFamily:mono,fontSize:11,color:T.accent,marginBottom:2}},hasAnomaly&&React.createElement("span",{style:{color:T.danger,marginRight:6}},"●"),s.session_id?.slice(0,20),"..."),
-            React.createElement("div",{style:{fontFamily:mono,fontSize:10,color:T.text3}},fmtTs(s.created_at))
-          ),
-          React.createElement("div",{style:{fontFamily:mono,fontSize:12,color:T.text2,textAlign:"center"}},s.turn_count??0),
-          React.createElement("div",{style:{fontFamily:mono,fontSize:12,color:maxRisk>2.0?T.danger:T.text2,textAlign:"center"}},maxRisk.toFixed(2)),
-          React.createElement("div",{style:{textAlign:"center"}},
-            React.createElement("span",{style:{fontFamily:mono,fontSize:9,letterSpacing:"0.1em",textTransform:"uppercase",color:s.crescendo_detected?T.danger:T.text3,padding:"2px 6px",border:`1px solid ${s.crescendo_detected?T.danger:T.border2}`}},s.crescendo_detected?"ANOMALY":"CLEAN")
-          ),
-          React.createElement(TauChart,{trajectory:s.tau_trajectory,width:160,height:32})
-        );
-      }):React.createElement("div",{style:{padding:"60px 24px",textAlign:"center"}},
-        React.createElement("div",{style:{fontFamily:mono,fontSize:13,color:T.text3}},"No sessions recorded yet.")
-      )
-    ),
-    // Overview tab
-    tab==="overview"&&deployment&&React.createElement("div",{style:{padding:24}},
-      React.createElement("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:1,background:T.border,border:`1px solid ${T.border}`,marginBottom:24}},
-        ...[{label:"Total Requests",value:deployment.requests??0,color:T.accent},{label:"Alerts Fired",value:deployment.alerts??0,color:deployment.alerts>0?T.danger:T.text2},{label:"Sessions",value:sessions.length,color:T.accent},{label:"Status",value:(deployment.status||"—").toUpperCase(),color:statusColor(deployment.status)},{label:"Warmup",value:deployment.warmup_complete?"COMPLETE":"IN PROGRESS",color:deployment.warmup_complete?T.ok:T.warn},{label:"Traces",value:traces.length,color:T.accent}].map(({label,value,color})=>
-          React.createElement("div",{key:label,style:{background:T.bg,padding:24}},
-            React.createElement("div",{style:{fontFamily:mono,fontSize:9,letterSpacing:"0.15em",textTransform:"uppercase",color:T.text3,marginBottom:8}},label),
-            React.createElement("div",{style:{fontFamily:mono,fontSize:24,fontWeight:600,color,lineHeight:1}},value)
-          )
-        )
-      )
-    ),
-    selectedTrace&&React.createElement(TraceDetail,{trace:selectedTrace,onClose:()=>setSelectedTrace(null)})
-  );
+  btn.disabled=false;btn.textContent='Connect →';
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+async function loadDeployment(did){
+  [_deployment,_traces,_sessions]=await Promise.all([_store.deployment(did),_store.traces(did),_store.sessions(did)]);
+  renderTopbarStats();renderTraces();renderSessions();renderOverview();
+}
+
+async function loadData(){
+  const did=document.getElementById('deploy-label').textContent;
+  if(!did||did==='—')return;
+  await loadDeployment(did);
+}
+
+function disconnect(){_store=null;document.getElementById('connect').style.display='flex';document.getElementById('app').style.display='none';closeDetail();}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderTopbarStats(){
+  const d=_deployment||{};
+  document.getElementById('topbar-stats').innerHTML=[
+    {l:'Requests',v:d.requests??0,c:''},
+    {l:'Alerts',v:d.alerts??0,c:d.alerts>0?'color:var(--danger)':''},
+    {l:'Status',v:(d.status||'—').toUpperCase(),c:'color:'+({stable:'var(--ok)',warmup:'var(--warn)',adversarial:'var(--danger)'}[d.status]||'var(--t2)')},
+    {l:'Traces',v:_traces.length,c:''},
+  ].map(x=>`<div class="stat-item"><div class="stat-label">${x.l}</div><div class="stat-val" style="${x.c}">${x.v}</div></div>`).join('');
+}
+
+function renderTraces(){
+  const el=document.getElementById('traces-body');
+  if(!_traces.length){el.innerHTML='<div class="empty"><p>No traces recorded yet.</p></div>';return;}
+  el.innerHTML=_traces.map((t,i)=>{
+    const s=sc(t.drift_status);
+    const tok=(t.input_tokens||0)+(t.output_tokens||0);
+    return`<div class="trace-row${_selectedTrace?.request_id===t.request_id?' selected':''}" style="grid-template-columns:28px 1fr 90px 70px 60px 80px;" onclick="selectTrace('${esc(t.request_id)}')">
+      <span class="mono" style="font-size:10px;color:var(--t3);text-align:right;">${i+1}</span>
+      <div><div class="trace-prompt">${esc(t.prompt||'—')}</div><div class="trace-time">${fts(t.timestamp)}</div></div>
+      <div class="status-badge s-${s}">${si(t.drift_status)} ${esc(t.drift_status||'—')}</div>
+      <div class="metric">${fms(t.latency_ms)}</div>
+      <div class="metric">${tok||'—'}</div>
+      <div class="metric" style="color:var(--t3);">${fco(t.cost_usd)}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderSessions(){
+  const el=document.getElementById('sessions-body');
+  if(!_sessions.length){el.innerHTML='<div class="empty"><p>No sessions recorded yet.</p></div>';return;}
+  el.innerHTML=_sessions.map(s=>{
+    const maxRisk=s.combined_scores?.length?Math.max(...s.combined_scores.filter(Boolean)):0;
+    const anomaly=s.crescendo_detected||maxRisk>2;
+    return`<div class="sess-row" style="grid-template-columns:1fr 60px 70px 100px 160px;">
+      <div>
+        <div class="mono" style="font-size:11px;color:var(--ac);">${anomaly?'<span style="color:var(--danger);margin-right:4px;">●</span>':''}${esc((s.session_id||'').slice(0,22))}…</div>
+        <div class="mono" style="font-size:10px;color:var(--t3);margin-top:2px;">${fts(s.created_at)}</div>
+      </div>
+      <div class="metric">${s.turn_count??0}</div>
+      <div class="metric" style="color:${maxRisk>2?'var(--danger)':'var(--t2)'};">${maxRisk.toFixed(2)}</div>
+      <div style="text-align:center;"><span class="mono" style="font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:${anomaly?'var(--danger)':'var(--t3)'};padding:2px 6px;border:1px solid ${anomaly?'var(--danger)':'var(--b2)'};">${anomaly?'ANOMALY':'CLEAN'}</span></div>
+      <div>${sparkline(s.tau_trajectory)}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderOverview(){
+  const d=_deployment||{};
+  const items=[
+    {l:'Total requests',v:d.requests??0,c:'var(--ac)'},
+    {l:'Alerts fired',v:d.alerts??0,c:d.alerts>0?'var(--danger)':'var(--t2)'},
+    {l:'Sessions',v:_sessions.length,c:'var(--ac)'},
+    {l:'Traces',v:_traces.length,c:'var(--ac)'},
+    {l:'Warmup',v:d.warmup_complete?'Complete':'In progress',c:d.warmup_complete?'var(--ok)':'var(--warn)'},
+    {l:'Status',v:(d.status||'—').toUpperCase(),c:({stable:'var(--ok)',warmup:'var(--warn)',adversarial:'var(--danger)'}[d.status]||'var(--t2)')},
+  ];
+  document.getElementById('overview-grid').innerHTML=items.map(x=>`<div class="ov-card"><div class="ov-label">${x.l}</div><div class="ov-val" style="color:${x.c};">${x.v}</div></div>`).join('');
+}
+
+// ── Trace detail ──────────────────────────────────────────────────────────────
+function selectTrace(id){
+  _selectedTrace=_traces.find(t=>t.request_id===id)||null;
+  renderTraces();
+  if(!_selectedTrace){closeDetail();return;}
+  const t=_selectedTrace;
+  const s=sc(t.drift_status);
+  document.getElementById('detail-body').innerHTML=`
+    <div style="margin-bottom:20px;">
+      <span class="mono s-${s}" style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border:1px solid currentColor;">${si(t.drift_status)} ${esc(t.drift_status||'unknown')}</span>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-label">Request ID</div>
+      <div class="mono" style="font-size:11px;color:var(--t1);">${esc(t.request_id||'—')}</div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-label">Timestamp</div>
+      <div class="mono" style="font-size:11px;color:var(--t1);">${fts(t.timestamp)}</div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-label">Prompt</div>
+      <div class="detail-content">${esc(t.prompt||'—')}</div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-label">Response</div>
+      <div class="detail-content" style="color:var(--t2);">${esc(t.response||'—')}</div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-label">Metrics</div>
+      <div class="metrics-grid">
+        ${[['Latency',fms(t.latency_ms)],['Cost',fco(t.cost_usd)],['Input tokens',t.input_tokens||'—'],['Output tokens',t.output_tokens||'—'],['FR-Z',t.fr_z?.toFixed?.(4)||'—'],['Drift status',t.drift_status||'—']].map(([l,v])=>`<div class="metric-card"><div class="mc-label">${l}</div><div class="mc-val">${esc(String(v))}</div></div>`).join('')}
+      </div>
+    </div>
+  `;
+  document.getElementById('detail').classList.add('open');
+}
+
+function closeDetail(){
+  _selectedTrace=null;
+  document.getElementById('detail').classList.remove('open');
+  renderTraces();
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+function switchTab(name,btn){
+  ['traces','sessions','overview'].forEach(t=>{
+    document.getElementById('tab-'+t).style.display=t===name?'block':'none';
+  });
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// ── Auto-connect if same origin ───────────────────────────────────────────────
+window.addEventListener('load',()=>{
+  const params=new URLSearchParams(location.search);
+  const key=params.get('key')||'';
+  if(key){
+    document.getElementById('conn-url').value=location.origin;
+    document.getElementById('conn-key').value=key;
+    connect();
+  } else {
+    document.getElementById('conn-url').value=location.origin;
+  }
+});
+
+document.getElementById('conn-key').addEventListener('keydown',e=>{if(e.key==='Enter')connect();});
 </script>
 </body>
 </html>
