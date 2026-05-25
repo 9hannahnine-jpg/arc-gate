@@ -77,6 +77,13 @@ Latency: Arc Gate adds ~200ms median overhead on top of your existing LLM latenc
 #
 ## Independent Third-Party Verification
 
+> "In independent security screening by tabverified.ai, Arc Gate blocked 100% of attack payloads across three consecutive runs (25/25 each). The same model without Arc Gate passed only 76-80% of tests, failing 5-6 attack payloads per run. Tested on GPT-4.1-nano, May 2026."
+> — [TAB Platform](https://tabverified.ai)
+
+**Badge:** *Independently verified by tabverified.ai — 25/25 security screening, 100% block rate*
+
+
+
 Arc Gate is independently verified on [TAB Platform](https://tabverified.ai) — the first security proxy tested on TAB's security screening infrastructure.
 
 ### TAB Security Screening Results
