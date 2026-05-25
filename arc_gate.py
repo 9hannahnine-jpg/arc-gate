@@ -2207,6 +2207,15 @@ async def lifespan(app):
     for did, version in store.list_all(): store.checkpoint(did, version)
 
 app = FastAPI(title="Arc Gate", version="1.0", lifespan=lifespan)
+
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
 
