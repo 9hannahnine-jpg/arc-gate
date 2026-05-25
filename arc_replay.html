@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Arc Gate — Session Replay</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+--bg:#0d1117;--bg2:#161b22;--bg3:#1c2128;
+--b1:#21262d;--b2:#30363d;
+--t1:#e6edf3;--t2:#8b949e;--t3:#484f58;
+--ac:#79c0ff;--ok:#2ea043;--warn:#d29922;--danger:#f85149;--purple:#bc8cff;
+}
+body{background:var(--bg);color:var(--t1);font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:13px;line-height:1.5;min-height:100vh;}
+*{scrollbar-width:thin;scrollbar-color:var(--b2) transparent;}
+a{color:inherit;text-decoration:none;}
+button,input,select{font-family:inherit;font-size:inherit;}
+.mono{font-family:'IBM Plex Mono',monospace;}
+.label{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--t3);}
+
+/* Connect screen */
+#connect{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;}
+.connect-box{width:100%;max-width:440px;border:1px solid var(--b2);background:var(--bg2);padding:40px;}
+.connect-box h1{font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:600;margin-bottom:6px;}
+.connect-box p{font-size:13px;color:var(--t2);margin-bottom:32px;line-height:1.7;}
+.field{margin-bottom:16px;}
+.field label{display:block;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--t3);margin-bottom:6px;}
+.field input{width:100%;background:var(--bg3);border:1px solid var(--b2);color:var(--t1);padding:9px 12px;outline:none;font-family:'IBM Plex Mono',monospace;font-size:11px;}
+.field input:focus{border-color:var(--ac);}
+.btn-primary{width:100%;padding:10px;background:var(--ac);color:var(--bg);font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.06em;border:none;cursor:pointer;}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed;}
+.error-msg{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--danger);padding:8px 12px;border:1px solid var(--danger);margin-bottom:16px;}
+
+/* App shell */
+#app{display:none;flex-direction:column;min-height:100vh;}
+#topbar{display:flex;align-items:center;justify-content:space-between;height:50px;padding:0 24px;border-bottom:1px solid var(--b1);background:var(--bg2);position:sticky;top:0;z-index:40;gap:16px;}
+.topbar-left{display:flex;align-items:center;gap:20px;min-width:0;}
+.wordmark{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:.1em;white-space:nowrap;}
+.wordmark span{color:var(--ac);}
+.deploy-badge{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--t3);background:var(--bg3);border:1px solid var(--b1);padding:3px 8px;white-space:nowrap;}
+.topbar-right{display:flex;align-items:center;gap:12px;flex-shrink:0;}
+.stat-item{text-align:center;}
+.stat-item .stat-label{font-family:'IBM Plex Mono',monospace;font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);}
+.stat-item .stat-val{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--t2);margin-top:1px;}
+.btn-sm{background:none;border:1px solid var(--b2);color:var(--t2);font-family:'IBM Plex Mono',monospace;font-size:10px;padding:4px 10px;cursor:pointer;white-space:nowrap;}
+.btn-sm:hover{border-color:var(--ac);color:var(--ac);}
+
+/* Tabs */
+#tabbar{display:flex;border-bottom:1px solid var(--b1);background:var(--bg2);padding:0 24px;}
+.tab-btn{background:none;border:none;border-bottom:2px solid transparent;color:var(--t3);font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:11px 18px;cursor:pointer;transition:all .15s;}
+.tab-btn.active{border-bottom-color:var(--ac);color:var(--ac);}
+.tab-btn:hover:not(.active){color:var(--t2);}
+
+/* Table header */
+.tbl-hdr{display:grid;gap:12px;padding:7px 20px;border-bottom:1px solid var(--b1);background:var(--bg2);position:sticky;top:50px;z-index:30;}
+.tbl-hdr span{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);}
+
+/* Trace row */
+.trace-row{display:grid;gap:12px;padding:9px 20px;border-bottom:1px solid var(--b1);cursor:pointer;align-items:center;transition:background .1s;}
+.trace-row:hover{background:var(--bg2);}
+.trace-row.selected{background:var(--bg3);}
+.trace-prompt{font-size:12px;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.trace-time{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--t3);margin-top:2px;}
+.status-badge{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.08em;text-transform:uppercase;text-align:center;}
+.metric{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--t2);text-align:center;}
+
+/* Session row */
+.sess-row{display:grid;gap:16px;padding:12px 20px;border-bottom:1px solid var(--b1);align-items:center;cursor:pointer;transition:background .1s;}
+.sess-row:hover{background:var(--bg2);}
+
+/* Detail panel */
+#detail{position:fixed;top:0;right:0;bottom:0;width:460px;background:var(--bg2);border-left:1px solid var(--b2);overflow-y:auto;z-index:50;display:none;flex-direction:column;}
+#detail.open{display:flex;}
+#detail-hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--b1);position:sticky;top:0;background:var(--bg2);z-index:1;}
+#detail-body{padding:20px;flex:1;}
+.detail-section{margin-bottom:20px;}
+.detail-section-label{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--t3);margin-bottom:8px;}
+.detail-content{background:var(--bg3);border:1px solid var(--b1);padding:12px;font-size:12px;color:var(--t1);line-height:1.7;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto;}
+.metrics-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.metric-card{background:var(--bg3);border:1px solid var(--b1);padding:10px 12px;}
+.metric-card .mc-label{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);margin-bottom:4px;}
+.metric-card .mc-val{font-family:'IBM Plex Mono',monospace;font-size:15px;color:var(--ac);}
+
+/* Empty state */
+.empty{padding:60px 24px;text-align:center;}
+.empty p{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--t3);}
+
+/* Overview */
+.overview-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--b1);border:1px solid var(--b1);}
+.ov-card{background:var(--bg);padding:24px;}
+.ov-card .ov-label{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--t3);margin-bottom:10px;}
+.ov-card .ov-val{font-family:'IBM Plex Mono',monospace;font-size:26px;font-weight:600;line-height:1;}
+
+/* Status colors */
+.s-stable{color:var(--ok);}
+.s-block{color:var(--danger);}
+.s-warn{color:var(--warn);}
+.s-muted{color:var(--t3);}
+
+/* Tau sparkline */
+.sparkline-wrap{display:flex;align-items:center;}
+</style>
+</head>
+<body>
+
+<!-- Connect screen -->
+<div id="connect">
+  <div class="connect-box">
+    <div class="label" style="color:var(--ac);margin-bottom:10px;">Arc Gate</div>
+    <h1>Session Replay</h1>
+    <p>Inspect every request, decision, and blocked attack across your agent sessions.</p>
+    <div id="conn-error" class="error-msg" style="display:none;"></div>
+    <div class="field">
+      <label>Arc Gate URL</label>
+      <input type="text" id="conn-url" placeholder="https://your-instance.up.railway.app" autocomplete="off"/>
+    </div>
+    <div class="field">
+      <label>API Key</label>
+      <input type="password" id="conn-key" placeholder="ag-..." autocomplete="off"/>
+    </div>
+    <button class="btn-primary" id="conn-btn" onclick="connect()">Connect →</button>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <div id="topbar">
+    <div class="topbar-left">
+      <div class="wordmark">ARC<span>.</span>GATE</div>
+      <div class="deploy-badge" id="deploy-label">—</div>
+      <div style="display:flex;gap:20px;" id="topbar-stats"></div>
+    </div>
+    <div class="topbar-right">
+      <button class="btn-sm" onclick="loadData()">↺ Refresh</button>
+      <a href="/dashboard" class="btn-sm">← Dashboard</a>
+      <button class="btn-sm" onclick="disconnect()">Disconnect</button>
+    </div>
+  </div>
+
+  <div id="tabbar">
+    <button class="tab-btn active" onclick="switchTab('traces',this)">Traces</button>
+    <button class="tab-btn" onclick="switchTab('sessions',this)">Sessions</button>
+    <button class="tab-btn" onclick="switchTab('overview',this)">Overview</button>
+  </div>
+
+  <div id="tab-traces">
+    <div class="tbl-hdr" style="grid-template-columns:28px 1fr 90px 70px 60px 80px;">
+      <span>#</span><span>Prompt</span><span style="text-align:center;">Status</span>
+      <span style="text-align:center;">Latency</span><span style="text-align:center;">Tokens</span>
+      <span style="text-align:center;">Cost</span>
+    </div>
+    <div id="traces-body"></div>
+  </div>
+
+  <div id="tab-sessions" style="display:none;">
+    <div class="tbl-hdr" style="grid-template-columns:1fr 60px 70px 100px 160px;">
+      <span>Session</span><span style="text-align:center;">Turns</span>
+      <span style="text-align:center;">Risk</span><span style="text-align:center;">Status</span>
+      <span>τ Trajectory</span>
+    </div>
+    <div id="sessions-body"></div>
+  </div>
+
+  <div id="tab-overview" style="display:none;padding:24px;">
+    <div class="overview-grid" id="overview-grid"></div>
+  </div>
+</div>
+
+<!-- Detail panel -->
+<div id="detail">
+  <div id="detail-hdr">
+    <div class="mono" style="font-size:11px;color:var(--ac);letter-spacing:.1em;">TRACE DETAIL</div>
+    <button class="btn-sm" onclick="closeDetail()">ESC</button>
+  </div>
+  <div id="detail-body"></div>
+</div>
+
+<script>
+let _store=null, _traces=[], _sessions=[], _deployment=null, _selectedTrace=null;
+
+// ── Store ─────────────────────────────────────────────────────────────────────
+class Store{
+  constructor(url,key){this.url=url.replace(/\/$/,'');this.key=key;}
+  async get(path){
+    const r=await fetch(this.url+path,{headers:{'X-Arc-Gate-Key':this.key}});
+    if(!r.ok)throw new Error(r.status+' '+r.statusText);
+    return r.json();
+  }
+  async deployments(){return(await this._get('/sentry/deployments')).deployments||[];}
+  async deployment(id){return this._get('/sentry/deployments/'+id);}
+  async traces(id,limit=200){return((await this._get('/sentry/deployments/'+id+'/traces?limit='+limit)).traces)||[];}
+  async sessions(id,limit=50){return((await this._get('/sentry/deployments/'+id+'/sessions?limit='+limit)).sessions)||[];}
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const sc=s=>{if(!s)return'muted';const l=s.toLowerCase();if(l.includes('block')||l.includes('drift')||l.includes('compromised'))return'block';if(l.includes('restrict')||l.includes('warn')||l.includes('elevated'))return'warn';if(l.includes('stable')||l.includes('allow'))return'stable';return'muted';};
+const si=s=>{const m={block:'✕',warn:'⚠',stable:'✓',muted:'○'};return m[sc(s)]||'○';};
+const fts=ts=>{if(!ts)return'—';const d=new Date(ts*1000);return d.toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});};
+const fms=ms=>ms?Math.round(ms)+'ms':'—';
+const fco=c=>c?'$'+Number(c).toFixed(5):'—';
+const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+function sparkline(traj,w=150,h=30){
+  if(!traj||traj.length<2)return'<span style="font-family:\'IBM Plex Mono\',monospace;font-size:9px;color:var(--t3);">building...</span>';
+  const v=traj.filter(x=>x!=null);
+  if(!v.length)return'';
+  const TS=1.2247,mn=Math.min(...v,0),mx=Math.max(...v,TS*1.2),rng=mx-mn||1;
+  const pts=v.map((x,i)=>`${(i/(v.length-1))*w},${h-((x-mn)/rng)*h}`).join(' ');
+  const ty=h-((TS-mn)/rng)*h;
+  const dots=v.map((x,i)=>`<circle cx="${(i/(v.length-1))*w}" cy="${h-((x-mn)/rng)*h}" r="2.5" fill="${x<TS?'var(--danger)':'var(--ok)'}">`).join('');
+  return`<svg width="${w}" height="${h}" style="display:block;overflow:visible;"><line x1="0" y1="${ty}" x2="${w}" y2="${ty}" stroke="var(--warn)" stroke-width="1" stroke-dasharray="3,3" opacity=".5"/><polyline points="${pts}" fill="none" stroke="var(--ac)" stroke-width="1.5"/>${dots}</svg>`;
+}
+
+// ── Connect ───────────────────────────────────────────────────────────────────
+async function connect(){
+  const url=document.getElementById('conn-url').value.trim();
+  const key=document.getElementById('conn-key').value.trim();
+  if(!url||!key)return;
+  const btn=document.getElementById('conn-btn');
+  btn.disabled=true;btn.textContent='Connecting...';
+  document.getElementById('conn-error').style.display='none';
+  try{
+    _store=new Store(url,key);
+    const deps=await _store.deployments();
+    if(!deps.length)throw new Error('No deployments found');
+    const did=deps[0].deployment_id;
+    document.getElementById('deploy-label').textContent=did;
+    await loadDeployment(did);
+    document.getElementById('connect').style.display='none';
+    document.getElementById('app').style.display='flex';
+    document.getElementById('app').style.flexDirection='column';
+  }catch(e){
+    const el=document.getElementById('conn-error');
+    el.textContent='Connection failed: '+e.message;el.style.display='block';
+    _store=null;
+  }
+  btn.disabled=false;btn.textContent='Connect →';
+}
+
+async function loadDeployment(did){
+  [_deployment,_traces,_sessions]=await Promise.all([_store.deployment(did),_store.traces(did),_store.sessions(did)]);
+  renderTopbarStats();renderTraces();renderSessions();renderOverview();
+}
+
+async function loadData(){
+  const did=document.getElementById('deploy-label').textContent;
+  if(!did||did==='—')return;
+  await loadDeployment(did);
+}
+
+function disconnect(){_store=null;document.getElementById('connect').style.display='flex';document.getElementById('app').style.display='none';closeDetail();}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderTopbarStats(){
+  const d=_deployment||{};
+  document.getElementById('topbar-stats').innerHTML=[
+    {l:'Requests',v:d.requests??0,c:''},
+    {l:'Alerts',v:d.alerts??0,c:d.alerts>0?'color:var(--danger)':''},
+    {l:'Status',v:(d.status||'—').toUpperCase(),c:'color:'+({stable:'var(--ok)',warmup:'var(--warn)',adversarial:'var(--danger)'}[d.status]||'var(--t2)')},
+    {l:'Traces',v:_traces.length,c:''},
+  ].map(x=>`<div class="stat-item"><div class="stat-label">${x.l}</div><div class="stat-val" style="${x.c}">${x.v}</div></div>`).join('');
+}
+
+function renderTraces(){
+  const el=document.getElementById('traces-body');
+  if(!_traces.length){el.innerHTML='<div class="empty"><p>No traces recorded yet.</p></div>';return;}
+  el.innerHTML=_traces.map((t,i)=>{
+    const s=sc(t.drift_status);
+    const tok=(t.input_tokens||0)+(t.output_tokens||0);
+    return`<div class="trace-row${_selectedTrace?.request_id===t.request_id?' selected':''}" style="grid-template-columns:28px 1fr 90px 70px 60px 80px;" onclick="selectTrace('${esc(t.request_id)}')">
+      <span class="mono" style="font-size:10px;color:var(--t3);text-align:right;">${i+1}</span>
+      <div><div class="trace-prompt">${esc(t.prompt||'—')}</div><div class="trace-time">${fts(t.timestamp)}</div></div>
+      <div class="status-badge s-${s}">${si(t.drift_status)} ${esc(t.drift_status||'—')}</div>
+      <div class="metric">${fms(t.latency_ms)}</div>
+      <div class="metric">${tok||'—'}</div>
+      <div class="metric" style="color:var(--t3);">${fco(t.cost_usd)}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderSessions(){
+  const el=document.getElementById('sessions-body');
+  if(!_sessions.length){el.innerHTML='<div class="empty"><p>No sessions recorded yet.</p></div>';return;}
+  el.innerHTML=_sessions.map(s=>{
+    const maxRisk=s.combined_scores?.length?Math.max(...s.combined_scores.filter(Boolean)):0;
+    const anomaly=s.crescendo_detected||maxRisk>2;
+    return`<div class="sess-row" style="grid-template-columns:1fr 60px 70px 100px 160px;">
+      <div>
+        <div class="mono" style="font-size:11px;color:var(--ac);">${anomaly?'<span style="color:var(--danger);margin-right:4px;">●</span>':''}${esc((s.session_id||'').slice(0,22))}…</div>
+        <div class="mono" style="font-size:10px;color:var(--t3);margin-top:2px;">${fts(s.created_at)}</div>
+      </div>
+      <div class="metric">${s.turn_count??0}</div>
+      <div class="metric" style="color:${maxRisk>2?'var(--danger)':'var(--t2)'};">${maxRisk.toFixed(2)}</div>
+      <div style="text-align:center;"><span class="mono" style="font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:${anomaly?'var(--danger)':'var(--t3)'};padding:2px 6px;border:1px solid ${anomaly?'var(--danger)':'var(--b2)'};">${anomaly?'ANOMALY':'CLEAN'}</span></div>
+      <div>${sparkline(s.tau_trajectory)}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderOverview(){
+  const d=_deployment||{};
+  const items=[
+    {l:'Total requests',v:d.requests??0,c:'var(--ac)'},
+    {l:'Alerts fired',v:d.alerts??0,c:d.alerts>0?'var(--danger)':'var(--t2)'},
+    {l:'Sessions',v:_sessions.length,c:'var(--ac)'},
+    {l:'Traces',v:_traces.length,c:'var(--ac)'},
+    {l:'Warmup',v:d.warmup_complete?'Complete':'In progress',c:d.warmup_complete?'var(--ok)':'var(--warn)'},
+    {l:'Status',v:(d.status||'—').toUpperCase(),c:({stable:'var(--ok)',warmup:'var(--warn)',adversarial:'var(--danger)'}[d.status]||'var(--t2)')},
+  ];
+  document.getElementById('overview-grid').innerHTML=items.map(x=>`<div class="ov-card"><div class="ov-label">${x.l}</div><div class="ov-val" style="color:${x.c};">${x.v}</div></div>`).join('');
+}
+
+// ── Trace detail ──────────────────────────────────────────────────────────────
+function selectTrace(id){
+  _selectedTrace=_traces.find(t=>t.request_id===id)||null;
+  renderTraces();
+  if(!_selectedTrace){closeDetail();return;}
+  const t=_selectedTrace;
+  const s=sc(t.drift_status);
+  document.getElementById('detail-body').innerHTML=`
+    <div style="margin-bottom:20px;">
+      <span class="mono s-${s}" style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border:1px solid currentColor;">${si(t.drift_status)} ${esc(t.drift_status||'unknown')}</span>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-label">Request ID</div>
+      <div class="mono" style="font-size:11px;color:var(--t1);">${esc(t.request_id||'—')}</div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-label">Timestamp</div>
+      <div class="mono" style="font-size:11px;color:var(--t1);">${fts(t.timestamp)}</div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-label">Prompt</div>
+      <div class="detail-content">${esc(t.prompt||'—')}</div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-label">Response</div>
+      <div class="detail-content" style="color:var(--t2);">${esc(t.response||'—')}</div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-label">Metrics</div>
+      <div class="metrics-grid">
+        ${[['Latency',fms(t.latency_ms)],['Cost',fco(t.cost_usd)],['Input tokens',t.input_tokens||'—'],['Output tokens',t.output_tokens||'—'],['FR-Z',t.fr_z?.toFixed?.(4)||'—'],['Drift status',t.drift_status||'—']].map(([l,v])=>`<div class="metric-card"><div class="mc-label">${l}</div><div class="mc-val">${esc(String(v))}</div></div>`).join('')}
+      </div>
+    </div>
+  `;
+  document.getElementById('detail').classList.add('open');
+}
+
+function closeDetail(){
+  _selectedTrace=null;
+  document.getElementById('detail').classList.remove('open');
+  renderTraces();
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+function switchTab(name,btn){
+  ['traces','sessions','overview'].forEach(t=>{
+    document.getElementById('tab-'+t).style.display=t===name?'block':'none';
+  });
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// ── Auto-connect if same origin ───────────────────────────────────────────────
+window.addEventListener('load',()=>{
+  const params=new URLSearchParams(location.search);
+  const key=params.get('key')||'';
+  if(key){
+    document.getElementById('conn-url').value=location.origin;
+    document.getElementById('conn-key').value=key;
+    connect();
+  } else {
+    document.getElementById('conn-url').value=location.origin;
+  }
+});
+
+document.getElementById('conn-key').addEventListener('keydown',e=>{if(e.key==='Enter')connect();});
+</script>
+</body>
+</html>

@@ -74,7 +74,33 @@ Note: Synthetic benchmarks do not capture the ambiguous middle cases found in pr
 
 Latency: Arc Gate adds ~200ms median overhead on top of your existing LLM latency. Measured against direct OpenAI API calls (1291ms direct vs 1497ms through Arc Gate, 5-run median, gpt-4o-mini, May 2026).
 
-### Known Limitations
+#
+## Independent Third-Party Verification
+
+> "In independent security screening by tabverified.ai, Arc Gate blocked 100% of attack payloads across three consecutive runs (25/25 each). The same model without Arc Gate passed only 76-80% of tests, failing 5-6 attack payloads per run. Tested on GPT-4.1-nano, May 2026."
+> — [TAB Platform](https://tabverified.ai)
+
+**Badge:** *Independently verified by tabverified.ai — 25/25 security screening, 100% block rate*
+
+
+
+Arc Gate is independently verified on [TAB Platform](https://tabverified.ai) — the first security proxy tested on TAB's security screening infrastructure.
+
+### TAB Security Screening Results
+
+| | Direct OpenAI (GPT-4.1-nano) | Through Arc Gate |
+|---|---|---|
+| Run 1 | 19/25 (76%) | 25/25 (100%) |
+| Run 2 | 20/25 (80%) | 25/25 (100%) |
+| Run 3 | 19/25 (76%) | 25/25 (100%) |
+
+**Arc Gate catches 5-6 attacks per run that the model lets through without a proxy.**
+
+The variance is in the model, not the proxy. Arc Gate is 25/25 every time.
+
+Verified by [TAB Platform](https://tabverified.ai) — 340+ benchmarks, independent AI agent verification.
+
+## Known Limitations
 Arc Gate is designed for **instruction-authority transfer from environmental content**. It does not claim universal prompt injection prevention.
 
 Current gaps:
@@ -177,3 +203,10 @@ bendexgeometry.com
 ---
 
 Bendex Geometry LLC · 2026
+
+## Related
+
+- [arc-gate](https://github.com/9hannahnine-jpg/arc-gate) — Runtime governance proxy for LLM agents
+- [arc-sentry](https://github.com/9hannahnine-jpg/arc-sentry) — Whitebox detector for self-hosted models
+- [arc-gate-mcp](https://github.com/9hannahnine-jpg/arc-gate-mcp) — Runtime governance for MCP tool calls
+- [arc-gate-benchmark](https://github.com/9hannahnine-jpg/arc-gate-benchmark) — Reproducible benchmark harness
