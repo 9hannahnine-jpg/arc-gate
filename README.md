@@ -203,3 +203,10 @@ bendexgeometry.com
 ---
 
 Bendex Geometry LLC · 2026
+
+## Related
+
+- [arc-gate](https://github.com/9hannahnine-jpg/arc-gate) — Runtime governance proxy for LLM agents
+- [arc-sentry](https://github.com/9hannahnine-jpg/arc-sentry) — Whitebox detector for self-hosted models
+- [arc-gate-mcp](https://github.com/9hannahnine-jpg/arc-gate-mcp) — Runtime governance for MCP tool calls
+- [arc-gate-benchmark](https://github.com/9hannahnine-jpg/arc-gate-benchmark) — Reproducible benchmark harness
