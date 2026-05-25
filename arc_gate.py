@@ -2719,13 +2719,9 @@ async def deployment_detail(deployment_id: str, model_version: str = None, auth=
     if s is None: s = load_state(deployment_id, model_version)
     cost = get_cost_summary(deployment_id, model_version)
     if s is None:
-        # Deployment exists in DB but not in memory — return basic info from deployments list
-        all_deps = list_deployments()
-        dep = next((d for d in all_deps if d["deployment_id"] == deployment_id), None)
-        if dep is None: return JSONResponse(status_code=404, content={"error": "not found"})
-        return {"deployment_id": deployment_id, "model_version": dep.get("model_version"),
-                "status": dep.get("status"), "step": 0, "requests": dep.get("requests", 0),
-                "alerts": dep.get("alerts", 0), "warmup_complete": dep.get("warmup_complete", False),
+        return {"deployment_id": deployment_id, "model_version": model_version,
+                "status": "unknown", "step": 0, "requests": 0,
+                "alerts": 0, "warmup_complete": False,
                 "drift_type": None, "confidence": 0.0, "cost_summary": cost}
     return {"deployment_id": deployment_id, "model_version": model_version,
             "status": s.last_status, "step": s.step, "requests": s.request_count,
