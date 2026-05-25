@@ -2227,6 +2227,22 @@ async def try_page():
     from fastapi.responses import FileResponse
     return FileResponse("try.html")
 
+@app.get("/arc-replay/api/{path:path}")
+async def arc_replay_proxy(path: str, request: Request, x_arc_gate_key: str = Header(None)):
+    """Proxy API calls from Arc Replay page to avoid CORS/extension issues."""
+    if not _check_api_key(x_arc_gate_key):
+        raise HTTPException(status_code=401, detail="Invalid or missing X-Arc-Gate-Key")
+    import httpx as _httpx
+    params = dict(request.query_params)
+    async with _httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(
+            f"http://localhost:{os.environ.get('PORT', '8080')}/sentry/{path}",
+            headers={"X-Arc-Gate-Key": x_arc_gate_key},
+            params=params
+        )
+    from fastapi.responses import JSONResponse as _JR
+    return _JR(content=r.json(), status_code=r.status_code)
+
 @app.get("/arc-replay")
 async def arc_replay_page():
     from fastapi.responses import HTMLResponse
@@ -2416,7 +2432,7 @@ let _store=null, _traces=[], _sessions=[], _deployment=null, _selectedTrace=null
 class Store{
   constructor(url,key){this.url=url.replace(/\\/$/,'');this.key=key;}
   async get(path){
-    const r=await fetch(this.url+path,{headers:{'X-Arc-Gate-Key':this.key}});
+    const r=await fetch('/arc-replay/api'+path.replace('/sentry',''),{headers:{'X-Arc-Gate-Key':this.key}});
     if(!r.ok)throw new Error(r.status+' '+r.statusText);
     return r.json();
   }
