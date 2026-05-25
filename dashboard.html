@@ -32,6 +32,8 @@ header{height:48px;display:flex;align-items:center;justify-content:space-between
 .hdr-tag{font-family:'IBM Plex Mono',monospace;font-size:9px;background:var(--bg4);border:1px solid var(--border2);padding:2px 8px;color:var(--text3);}
 .hdr-right{display:flex;align-items:center;gap:20px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text3);}
 .hdr-left{display:flex;align-items:center;gap:16px;}
+.hdr-link{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text3);text-decoration:none;letter-spacing:0.08em;text-transform:uppercase;transition:color 0.15s;}
+.hdr-link:hover{color:var(--accent);}
 .pulse-dot{width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;margin-right:5px;animation:blink 2s infinite;}
 @keyframes blink{0%,100%{opacity:1;}50%{opacity:0.4;}}
 .user-pill{display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);padding:4px 10px;}
@@ -178,6 +180,7 @@ header{height:48px;display:flex;align-items:center;justify-content:space-between
     <div class="hdr-tag">v3.1.1</div>
   </div>
   <div class="hdr-right">
+    <a class="hdr-link" href="/arc-replay">Session Replay</a>
     <span class="mono" id="hdr-upstream" style="color:var(--text2);font-size:10px;">-</span>
     <div class="user-pill" id="user-pill" style="display:none;">
       <span class="mono" id="user-email" style="font-size:10px;"></span>
