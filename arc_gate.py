@@ -2420,10 +2420,10 @@ class Store{
     if(!r.ok)throw new Error(r.status+' '+r.statusText);
     return r.json();
   }
-  async deployments(){return(await this._get('/sentry/deployments')).deployments||[];}
-  async deployment(id){return this._get('/sentry/deployments/'+id);}
-  async traces(id,limit=200){return((await this._get('/sentry/deployments/'+id+'/traces?limit='+limit)).traces)||[];}
-  async sessions(id,limit=50){return((await this._get('/sentry/deployments/'+id+'/sessions?limit='+limit)).sessions)||[];}
+  async deployments(){return(await this.get('/sentry/deployments')).deployments||[];}
+  async deployment(id){return this.get('/sentry/deployments/'+id);}
+  async traces(id,limit=200){return((await this.get('/sentry/deployments/'+id+'/traces?limit='+limit)).traces)||[];}
+  async sessions(id,limit=50){return((await this.get('/sentry/deployments/'+id+'/sessions?limit='+limit)).sessions)||[];}
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
