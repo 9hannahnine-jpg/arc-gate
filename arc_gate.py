@@ -2218,6 +2218,14 @@ async def try_page():
     from fastapi.responses import FileResponse
     return FileResponse("try.html")
 
+@app.get("/arc-replay")
+async def arc_replay_page():
+    import os as _os
+    _rp = _os.path.join(_os.path.dirname(__file__), "arc_replay.html")
+    from fastapi.responses import HTMLResponse
+    with open(_rp) as f:
+        return HTMLResponse(f.read())
+
 @app.get("/dashboard")
 async def dashboard():
     try:
