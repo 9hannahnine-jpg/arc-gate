@@ -2275,8 +2275,6 @@ async def try_page():
 @app.get("/arc-replay/api/{path:path}")
 async def arc_replay_proxy(path: str, request: Request, x_arc_gate_key: str = Header(None)):
     """Proxy API calls from Arc Replay page to avoid CORS/extension issues."""
-    if not check_api_key(x_arc_gate_key):
-        raise HTTPException(status_code=401, detail="Invalid or missing X-Arc-Gate-Key")
     try:
         params = dict(request.query_params)
         port = os.environ.get("PORT", "8080")
