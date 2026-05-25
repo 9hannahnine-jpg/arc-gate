@@ -656,6 +656,8 @@ BILLING_SMTP_USER     = os.environ.get("BILLING_SMTP_USER", "9hannahnine@gmail.c
 BILLING_SMTP_PASS     = os.environ.get("BILLING_SMTP_PASS", "")
 BILLING_FROM_NAME     = "Hannah @ Bendex Geometry"
 _DEMO_KEYS = {"demo", "demo-key", "test"}
+_DEMO_LIMIT = 500
+_DEMO_UPGRADE_URL = "https://buy.stripe.com/dRm5kF86u6qD7Bdg8R24003"
 
 
 # Demo key substitution
@@ -1111,6 +1113,11 @@ def _init_pg_db():
         updated_at REAL,
         UNIQUE(session_id, deployment_id)
     )""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS demo_usage (
+        "key" TEXT PRIMARY KEY,
+        request_count INTEGER DEFAULT 0,
+        last_request TIMESTAMP
+    )""")
     conn.commit()
     cur.close()
     conn.close()
@@ -1497,6 +1504,39 @@ def get_cost_summary(did, version=None):
     except: pass
     return {"total_cost_usd": 0, "input_tokens": 0, "output_tokens": 0,
             "avg_latency_ms": 0, "traced_requests": 0, "total_tokens": 0}
+
+def check_demo_usage(demo_key: str):
+    if not _USE_PG:
+        print("[DEMO] Postgres unavailable; demo usage limit not enforced")
+        return True, None
+    conn = None
+    try:
+        conn = _pg_connect()
+        cur = conn.cursor()
+        cur.execute('SELECT request_count FROM demo_usage WHERE "key"=%s FOR UPDATE', (demo_key,))
+        row = cur.fetchone()
+        if row and int(row[0] or 0) >= _DEMO_LIMIT:
+            conn.commit()
+            cur.close()
+            conn.close()
+            return False, int(row[0] or 0)
+        if row:
+            count = int(row[0] or 0) + 1
+            cur.execute('UPDATE demo_usage SET request_count=%s, last_request=NOW() WHERE "key"=%s', (count, demo_key))
+        else:
+            count = 1
+            cur.execute('INSERT INTO demo_usage("key", request_count, last_request) VALUES(%s,%s,NOW())', (demo_key, count))
+        conn.commit()
+        cur.close()
+        conn.close()
+        print(f"[DEMO] key={demo_key} usage={count}/{_DEMO_LIMIT}")
+        return True, count
+    except Exception as e:
+        if conn:
+            try: conn.rollback(); conn.close()
+            except Exception: pass
+        print(f"[DEMO] usage check error: {e}")
+        return True, None
 
 def list_versions(did):
     try:
@@ -2807,6 +2847,12 @@ async def proxy(request: Request, path: str,
     _incoming_token = request.headers.get("authorization","").replace("Bearer ","").replace("bearer ","").strip()
     _real_key = os.environ.get("OPENAI_API_KEY","")
     if _incoming_token in _DEMO_KEYS:
+        _demo_allowed, _demo_count = check_demo_usage(_incoming_token)
+        if not _demo_allowed:
+            return JSONResponse(status_code=429, content={
+                "error": "Demo limit reached. Get a production key at bendexgeometry.com/gate",
+                "upgrade_url": _DEMO_UPGRADE_URL
+            })
         if _real_key: hdrs["authorization"] = f"Bearer {_real_key}"
         else: return _auth_error_response(503, "Demo unavailable: OPENAI_API_KEY not set")
     elif _incoming_token.startswith("ag-"):
