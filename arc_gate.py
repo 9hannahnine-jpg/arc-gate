@@ -2483,7 +2483,7 @@ let _store=null, _traces=[], _sessions=[], _deployment=null, _selectedTrace=null
 class Store{
   constructor(url,key){this.url=url.replace(/\\/$/,'');this.key=key;}
   async get(path){
-    const r=await fetch('/arc-replay/api'+path.replace('/sentry',''),{headers:{'X-Arc-Gate-Key':this.key}});
+    const r=await fetch(path,{headers:{'X-Arc-Gate-Key':this.key}});
     if(!r.ok)throw new Error(r.status+' '+r.statusText);
     return r.json();
   }
