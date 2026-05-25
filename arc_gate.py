@@ -2275,8 +2275,6 @@ async def try_page():
 @app.get("/arc-replay/api/{path:path}")
 async def arc_replay_proxy(path: str, request: Request, x_arc_gate_key: str = Header(None)):
     """Proxy API calls from Arc Replay page to avoid CORS/extension issues."""
-    if not check_api_key(x_arc_gate_key):
-        raise HTTPException(status_code=401, detail="Invalid or missing X-Arc-Gate-Key")
     try:
         params = dict(request.query_params)
         port = os.environ.get("PORT", "8080")
@@ -2294,21 +2292,7 @@ async def arc_replay_proxy(path: str, request: Request, x_arc_gate_key: str = He
         from fastapi.responses import JSONResponse as _JR2
         return _JR2({"error": str(_e)}, status_code=500)
 
-@app.get("/arc-replay/api/{path:path}")
-async def arc_replay_proxy(path: str, request: Request, x_arc_gate_key: str = Header(None)):
-    """Proxy API calls from Arc Replay page to avoid CORS/extension issues."""
-    if not _check_api_key(x_arc_gate_key):
-        raise HTTPException(status_code=401, detail="Invalid or missing X-Arc-Gate-Key")
-    import httpx as _httpx
-    params = dict(request.query_params)
-    async with _httpx.AsyncClient(timeout=10) as client:
-        r = await client.get(
-            f"http://localhost:{os.environ.get('PORT', '8080')}/sentry/{path}",
-            headers={"X-Arc-Gate-Key": x_arc_gate_key},
-            params=params
-        )
-    from fastapi.responses import JSONResponse as _JR
-    return _JR(content=r.json(), status_code=r.status_code)
+
 
 @app.get("/arc-replay")
 async def arc_replay_page():
@@ -2318,7 +2302,7 @@ async def arc_replay_page():
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Arc Gate — Session Replay</title>
+<title>Arc Replay — Session Explorer</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -2499,7 +2483,7 @@ let _store=null, _traces=[], _sessions=[], _deployment=null, _selectedTrace=null
 class Store{
   constructor(url,key){this.url=url.replace(/\\/$/,'');this.key=key;}
   async get(path){
-    const r=await fetch('/arc-replay/api'+path.replace('/sentry',''),{headers:{'X-Arc-Gate-Key':this.key}});
+    const r=await fetch(path,{headers:{'X-Arc-Gate-Key':this.key}});
     if(!r.ok)throw new Error(r.status+' '+r.statusText);
     return r.json();
   }
@@ -2733,8 +2717,12 @@ async def list_deployments(auth=Depends(auth)):
 async def deployment_detail(deployment_id: str, model_version: str = None, auth=Depends(auth)):
     s = store.get(deployment_id, model_version)
     if s is None: s = load_state(deployment_id, model_version)
-    if s is None: return JSONResponse(status_code=404, content={"error": "not found"})
     cost = get_cost_summary(deployment_id, model_version)
+    if s is None:
+        return {"deployment_id": deployment_id, "model_version": model_version,
+                "status": "unknown", "step": 0, "requests": 0,
+                "alerts": 0, "warmup_complete": False,
+                "drift_type": None, "confidence": 0.0, "cost_summary": cost}
     return {"deployment_id": deployment_id, "model_version": model_version,
             "status": s.last_status, "step": s.step, "requests": s.request_count,
             "alerts": s.alert_count, "warmup_complete": s.step >= s.warmup,
