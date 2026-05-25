@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Arc Replay — Session Explorer</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#0d1117;color:#e6edf3;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:14px;}
+input,select,button{font-family:inherit;}
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:#0d1117;}
+::-webkit-scrollbar-thumb{background:#30363d;border-radius:3px;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+
+const T = {
+  bg:"#0d1117",bg2:"#161b22",bg3:"#1c2128",
+  border:"#21262d",border2:"#30363d",
+  text:"#e6edf3",text2:"#8b949e",text3:"#484f58",
+  accent:"#79c0ff",accent2:"#58a6ff",
+  danger:"#f85149",warn:"#d29922",ok:"#2ea043",purple:"#bc8cff"
+};
+const mono="'IBM Plex Mono','Fira Code',monospace";
+const sans="'IBM Plex Sans',system-ui,sans-serif";
+
+class ReplayStore {
+  constructor(baseUrl,apiKey){
+    this.baseUrl=baseUrl.replace(/\/$/,"");
+    this.apiKey=apiKey;
+  }
+  async _get(path){
+    const r=await fetch(`${this.baseUrl}${path}`,{headers:{"X-Arc-Gate-Key":this.apiKey}});
+    if(!r.ok)throw new Error(`${r.status} ${r.statusText}`);
+    return r.json();
+  }
+  async listDeployments(){const d=await this._get("/sentry/deployments");return d.deployments||[];}
+  async listSessions(did,limit=50){const d=await this._get(`/sentry/deployments/${did}/sessions?limit=${limit}`);return d.sessions||[];}
+  async listTraces(did,limit=100){const d=await this._get(`/sentry/deployments/${did}/traces?limit=${limit}`);return d.traces||[];}
+  async getDeployment(did){return this._get(`/sentry/deployments/${did}`);}
+}
+
+const statusColor=s=>{if(!s)return T.text3;const sl=s.toLowerCase();if(sl.includes("block")||sl.includes("drift")||sl.includes("compromised"))return T.danger;if(sl.includes("restrict")||sl.includes("warn")||sl.includes("elevated"))return T.warn;if(sl.includes("stable")||sl.includes("allow")||sl.includes("ok"))return T.ok;return T.text3;};
+const statusIcon=s=>{if(!s)return"○";const sl=s.toLowerCase();if(sl.includes("block")||sl.includes("drift"))return"✕";if(sl.includes("restrict")||sl.includes("warn"))return"⚠";if(sl.includes("stable")||sl.includes("allow"))return"✓";return"○";};
+const fmtTs=ts=>{if(!ts)return"—";const d=new Date(ts*1000);return d.toLocaleString("en-US",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit"});};
+const fmtMs=ms=>ms?`${Math.round(ms)}ms`:"—";
+const fmtCost=c=>c?`$${Number(c).toFixed(6)}`:"—";
+
+function TauChart({trajectory,width=200,height=48}){
+  if(!trajectory||trajectory.length<2)return React.createElement("span",{style:{fontFamily:mono,fontSize:10,color:T.text3}},"building...");
+  const TAU_STAR=1.2247;
+  const vals=trajectory.filter(v=>v!==null&&v!==undefined);
+  if(!vals.length)return null;
+  const min=Math.min(...vals,0);
+  const max=Math.max(...vals,TAU_STAR*1.2);
+  const range=max-min||1;
+  const pts=vals.map((v,i)=>{const x=(i/(vals.length-1))*width;const y=height-((v-min)/range)*height;return`${x},${y}`;}).join(" ");
+  const tauY=height-((TAU_STAR-min)/range)*height;
+  return React.createElement("svg",{width,height,style:{display:"block"}},
+    React.createElement("line",{x1:0,y1:tauY,x2:width,y2:tauY,stroke:T.warn,strokeWidth:1,strokeDasharray:"3,3",opacity:0.6}),
+    React.createElement("polyline",{points:pts,fill:"none",stroke:T.accent,strokeWidth:1.5}),
+    ...vals.map((v,i)=>{const x=(i/(vals.length-1))*width;const y=height-((v-min)/range)*height;return React.createElement("circle",{key:i,cx:x,cy:y,r:2.5,fill:v<TAU_STAR?T.danger:T.ok});})
+  );
+}
+
+function TraceDetail({trace,onClose}){
+  if(!trace)return null;
+  const color=statusColor(trace.drift_status);
+  return React.createElement("div",{style:{position:"fixed",top:0,right:0,bottom:0,width:480,background:T.bg2,borderLeft:`1px solid ${T.border2}`,overflowY:"auto",zIndex:100,display:"flex",flexDirection:"column"}},
+    React.createElement("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${T.border}`,position:"sticky",top:0,background:T.bg2,zIndex:1}},
+      React.createElement("div",{style:{fontFamily:mono,fontSize:11,color:T.accent,letterSpacing:"0.1em"}},"TRACE DETAIL"),
+      React.createElement("button",{onClick:onClose,style:{background:"none",border:`1px solid ${T.border2}`,color:T.text2,fontFamily:mono,fontSize:10,padding:"4px 10px",cursor:"pointer"}},"ESC")
+    ),
+    React.createElement("div",{style:{padding:20}},
+      React.createElement("div",{style:{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px",border:`1px solid ${color}`,marginBottom:20}},
+        React.createElement("span",{style:{fontFamily:mono,fontSize:10,color,letterSpacing:"0.1em",textTransform:"uppercase"}},`${statusIcon(trace.drift_status)} ${trace.drift_status||"unknown"}`)
+      ),
+      React.createElement("div",{style:{marginBottom:12}},
+        React.createElement("div",{style:{fontFamily:mono,fontSize:9,letterSpacing:"0.15em",textTransform:"uppercase",color:T.text3,marginBottom:4}},"REQUEST ID"),
+        React.createElement("div",{style:{fontFamily:mono,fontSize:11,color:T.text}},trace.request_id||"—")
+      ),
+      React.createElement("div",{style:{marginBottom:12}},
+        React.createElement("div",{style:{fontFamily:mono,fontSize:9,letterSpacing:"0.15em",textTransform:"uppercase",color:T.text3,marginBottom:4}},"TIMESTAMP"),
+        React.createElement("div",{style:{fontFamily:mono,fontSize:11,color:T.text}},fmtTs(trace.timestamp))
+      ),
+      React.createElement("div",{style:{borderTop:`1px solid ${T.border}`,paddingTop:16,marginBottom:16}},
+        React.createElement("div",{style:{fontFamily:mono,fontSize:9,letterSpacing:"0.15em",textTransform:"uppercase",color:T.text3,marginBottom:12}},"PROMPT"),
+        React.createElement("div",{style:{background:T.bg3,border:`1px solid ${T.border}`,padding:12,fontSize:12,color:T.text,lineHeight:1.7,fontFamily:sans,whiteSpace:"pre-wrap",wordBreak:"break-word"}},trace.prompt||"—")
+      ),
+      React.createElement("div",{style:{borderTop:`1px solid ${T.border}`,paddingTop:16,marginBottom:16}},
+        React.createElement("div",{style:{fontFamily:mono,fontSize:9,letterSpacing:"0.15em",textTransform:"uppercase",color:T.text3,marginBottom:12}},"RESPONSE"),
+        React.createElement("div",{style:{background:T.bg3,border:`1px solid ${T.border}`,padding:12,fontSize:12,color:T.text2,lineHeight:1.7,fontFamily:sans,whiteSpace:"pre-wrap",wordBreak:"break-word"}},trace.response||"—")
+      ),
+      React.createElement("div",{style:{borderTop:`1px solid ${T.border}`,paddingTop:16}},
+        React.createElement("div",{style:{fontFamily:mono,fontSize:9,letterSpacing:"0.15em",textTransform:"uppercase",color:T.text3,marginBottom:12}},"METRICS"),
+        React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}},
+          ...[["Latency",fmtMs(trace.latency_ms)],["Cost",fmtCost(trace.cost_usd)],["Input tokens",trace.input_tokens],["Output tokens",trace.output_tokens],["FR-Z",trace.fr_z?.toFixed?.(4)],].map(([label,value])=>
+            React.createElement("div",{key:label,style:{background:T.bg3,border:`1px solid ${T.border}`,padding:"10px 12px"}},
+              React.createElement("div",{style:{fontFamily:mono,fontSize:9,color:T.text3,marginBottom:4,letterSpacing:"0.1em",textTransform:"uppercase"}},label),
+              React.createElement("div",{style:{fontFamily:mono,fontSize:14,color:T.accent}},value||"—")
+            )
+          )
+        )
+      )
+    )
+  );
+}
+
+function App(){
+  const [config,setConfig]=useState({url:"",key:""});
+  const [connected,setConnected]=useState(false);
+  const [connecting,setConnecting]=useState(false);
+  const [error,setError]=useState(null);
+  const [store,setStore]=useState(null);
+  const [deployments,setDeployments]=useState([]);
+  const [selectedDeploy,setSelectedDeploy]=useState(null);
+  const [sessions,setSessions]=useState([]);
+  const [traces,setTraces]=useState([]);
+  const [deployment,setDeployment]=useState(null);
+  const [loading,setLoading]=useState(false);
+  const [tab,setTab]=useState("traces");
+  const [selectedTrace,setSelectedTrace]=useState(null);
+
+  // Auto-connect if URL params present
+  useEffect(()=>{
+    const params=new URLSearchParams(window.location.search);
+    const u=params.get("url")||window.location.origin;
+    const k=params.get("key")||"";
+    if(u&&k){setConfig({url:u,key:k});setTimeout(()=>connectWithConfig(u,k),100);}
+    else if(u){setConfig(c=>({...c,url:u}));}
+  },[]);
+
+  const connectWithConfig=async(url,key)=>{
+    setConnecting(true);setError(null);
+    try{
+      const s=new ReplayStore(url,key);
+      const deps=await s.listDeployments();
+      setStore(s);setDeployments(deps);setConnected(true);
+      if(deps.length>0)setSelectedDeploy(deps[0].deployment_id);
+    }catch(e){setError("Connection failed: "+e.message);}
+    setConnecting(false);
+  };
+
+  const connect=()=>connectWithConfig(config.url,config.key);
+
+  const loadData=useCallback(async()=>{
+    if(!store||!selectedDeploy)return;
+    setLoading(true);
+    try{
+      const [dep,sess,tr]=await Promise.all([store.getDeployment(selectedDeploy),store.listSessions(selectedDeploy),store.listTraces(selectedDeploy)]);
+      setDeployment(dep);setSessions(sess);setTraces(tr);
+    }catch(e){setError("Failed to load: "+e.message);}
+    setLoading(false);
+  },[store,selectedDeploy]);
+
+  useEffect(()=>{loadData();},[loadData]);
+
+  if(!connected){
+    return React.createElement("div",{style:{background:T.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}},
+      React.createElement("div",{style:{width:480,padding:40,border:`1px solid ${T.border2}`,background:T.bg2}},
+        React.createElement("div",{style:{fontFamily:mono,fontSize:11,letterSpacing:"0.2em",textTransform:"uppercase",color:T.accent,marginBottom:8}},"ARC REPLAY"),
+        React.createElement("div",{style:{fontFamily:mono,fontSize:22,fontWeight:600,color:T.text,marginBottom:8,lineHeight:1}},"Session Explorer"),
+        React.createElement("div",{style:{fontSize:13,color:T.text2,marginBottom:32,lineHeight:1.6}},"Connect to your Arc Gate instance to explore sessions, replay traces, and inspect governance decisions."),
+        ...[{label:"Arc Gate URL",placeholder:"https://your-arc-gate.up.railway.app",key:"url"},{label:"API Key",placeholder:"ag-...",key:"key",type:"password"}].map(({label,placeholder,key,type="text"})=>
+          React.createElement("div",{key,style:{marginBottom:16}},
+            React.createElement("div",{style:{fontFamily:mono,fontSize:9,letterSpacing:"0.15em",textTransform:"uppercase",color:T.text3,marginBottom:6}},label),
+            React.createElement("input",{type,placeholder,value:config[key],onChange:e=>setConfig(c=>({...c,[key]:e.target.value})),onKeyDown:e=>e.key==="Enter"&&connect(),style:{width:"100%",background:T.bg3,border:`1px solid ${T.border2}`,color:T.text,fontFamily:mono,fontSize:12,padding:"10px 12px",outline:"none",boxSizing:"border-box"}})
+          )
+        ),
+        error&&React.createElement("div",{style:{fontFamily:mono,fontSize:11,color:T.danger,marginBottom:16,padding:"8px 12px",border:`1px solid ${T.danger}`}},error),
+        React.createElement("button",{onClick:connect,disabled:connecting||!config.url||!config.key,style:{width:"100%",padding:"10px 0",background:T.accent,color:T.bg,fontFamily:mono,fontSize:11,fontWeight:600,letterSpacing:"0.08em",border:"none",cursor:"pointer",opacity:(connecting||!config.url||!config.key)?0.5:1}},connecting?"CONNECTING...":"CONNECT →")
+      )
+    );
+  }
+
+  return React.createElement("div",{style:{background:T.bg,minHeight:"100vh",color:T.text}},
+    // Top bar
+    React.createElement("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 24px",height:52,borderBottom:`1px solid ${T.border}`,background:T.bg2,position:"sticky",top:0,zIndex:50}},
+      React.createElement("div",{style:{display:"flex",alignItems:"center",gap:20}},
+        React.createElement("div",{style:{fontFamily:mono,fontSize:12,fontWeight:600,letterSpacing:"0.12em",color:T.text}},
+          "ARC",React.createElement("span",{style:{color:T.accent}},"."),
+          React.createElement("span",{style:{color:T.text2,fontWeight:400}},"REPLAY — Session Explorer")
+        ),
+        deployments.length>1&&React.createElement("select",{value:selectedDeploy||"",onChange:e=>setSelectedDeploy(e.target.value),style:{background:T.bg3,border:`1px solid ${T.border2}`,color:T.text,fontFamily:mono,fontSize:11,padding:"4px 8px"}},
+          deployments.map(d=>React.createElement("option",{key:d.deployment_id,value:d.deployment_id},d.deployment_id))
+        ),
+        deployments.length===1&&React.createElement("span",{style:{fontFamily:mono,fontSize:11,color:T.text2}},selectedDeploy)
+      ),
+      React.createElement("div",{style:{display:"flex",alignItems:"center",gap:16}},
+        deployment&&React.createElement("div",{style:{display:"flex",gap:20}},
+          ...[{label:"REQUESTS",value:deployment.requests??0},{label:"ALERTS",value:deployment.alerts??0,color:deployment.alerts>0?T.danger:T.text2},{label:"STATUS",value:(deployment.status||"—").toUpperCase(),color:statusColor(deployment.status)}].map(({label,value,color})=>
+            React.createElement("div",{key:label,style:{textAlign:"center"}},
+              React.createElement("div",{style:{fontFamily:mono,fontSize:9,color:T.text3,letterSpacing:"0.12em"}},label),
+              React.createElement("div",{style:{fontFamily:mono,fontSize:13,color:color||T.text2,marginTop:1}},value)
+            )
+          )
+        ),
+        React.createElement("button",{onClick:loadData,style:{background:"none",border:`1px solid ${T.border2}`,color:T.text2,fontFamily:mono,fontSize:10,padding:"4px 10px",cursor:"pointer"}},loading?"...":"↺ REFRESH"),
+        React.createElement("a",{href:"/dashboard",style:{background:"none",border:`1px solid ${T.border2}`,color:T.text3,fontFamily:mono,fontSize:10,padding:"4px 10px",textDecoration:"none"}},"← DASHBOARD"),
+        React.createElement("button",{onClick:()=>setConnected(false),style:{background:"none",border:`1px solid ${T.border2}`,color:T.text3,fontFamily:mono,fontSize:10,padding:"4px 10px",cursor:"pointer"}},"DISCONNECT")
+      )
+    ),
+    // Tab bar
+    React.createElement("div",{style:{display:"flex",borderBottom:`1px solid ${T.border}`,background:T.bg2,padding:"0 24px"}},
+      ["traces","sessions","overview"].map(t=>
+        React.createElement("button",{key:t,onClick:()=>setTab(t),style:{background:"none",border:"none",borderBottom:`2px solid ${tab===t?T.accent:"transparent"}`,color:tab===t?T.accent:T.text3,fontFamily:mono,fontSize:10,letterSpacing:"0.12em",textTransform:"uppercase",padding:"12px 20px",cursor:"pointer"}},t)
+      )
+    ),
+    // Traces tab
+    tab==="traces"&&React.createElement("div",null,
+      React.createElement("div",{style:{display:"grid",gridTemplateColumns:"28px 1fr 80px 80px 80px 80px",gap:12,padding:"8px 20px",borderBottom:`1px solid ${T.border}`,background:T.bg2}},
+        ["#","Prompt","Status","Latency","Tokens","Cost"].map(h=>
+          React.createElement("div",{key:h,style:{fontFamily:mono,fontSize:9,letterSpacing:"0.12em",textTransform:"uppercase",color:T.text3,textAlign:h!=="Prompt"?"center":"left"}},h)
+        )
+      ),
+      traces.length>0?traces.map((t,i)=>
+        React.createElement("div",{key:t.request_id,onClick:()=>setSelectedTrace(s=>s?.request_id===t.request_id?null:t),style:{display:"grid",gridTemplateColumns:"28px 1fr 80px 80px 80px 80px",gap:12,padding:"10px 20px",borderBottom:`1px solid ${T.border}`,background:selectedTrace?.request_id===t.request_id?T.bg3:"transparent",cursor:"pointer",alignItems:"center"}},
+          React.createElement("div",{style:{fontFamily:mono,fontSize:10,color:T.text3,textAlign:"right"}},i+1),
+          React.createElement("div",null,
+            React.createElement("div",{style:{fontSize:12,color:T.text,marginBottom:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},t.prompt||"—"),
+            React.createElement("div",{style:{fontFamily:mono,fontSize:10,color:T.text3}},fmtTs(t.timestamp))
+          ),
+          React.createElement("div",{style:{fontFamily:mono,fontSize:11,color:statusColor(t.drift_status),textAlign:"center"}},`${statusIcon(t.drift_status)} ${t.drift_status||"—"}`),
+          React.createElement("div",{style:{fontFamily:mono,fontSize:11,color:T.text2,textAlign:"center"}},fmtMs(t.latency_ms)),
+          React.createElement("div",{style:{fontFamily:mono,fontSize:11,color:T.text2,textAlign:"center"}},(t.input_tokens||0)+(t.output_tokens||0)||"—"),
+          React.createElement("div",{style:{fontFamily:mono,fontSize:11,color:T.text3,textAlign:"center"}},fmtCost(t.cost_usd))
+        )
+      ):React.createElement("div",{style:{padding:"60px 24px",textAlign:"center"}},
+        React.createElement("div",{style:{fontFamily:mono,fontSize:13,color:T.text3}},"No traces recorded yet.")
+      )
+    ),
+    // Sessions tab
+    tab==="sessions"&&React.createElement("div",null,
+      React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 80px 80px 120px 180px",gap:16,padding:"8px 20px",borderBottom:`1px solid ${T.border}`,background:T.bg2}},
+        ["Session ID","Turns","Max Risk","Status","τ Trajectory"].map(h=>
+          React.createElement("div",{key:h,style:{fontFamily:mono,fontSize:9,letterSpacing:"0.12em",textTransform:"uppercase",color:T.text3}},h)
+        )
+      ),
+      sessions.length>0?sessions.map(s=>{
+        const maxRisk=s.combined_scores?.length?Math.max(...s.combined_scores.filter(Boolean)):0;
+        const hasAnomaly=s.crescendo_detected||maxRisk>2.0;
+        return React.createElement("div",{key:s.session_id,style:{display:"grid",gridTemplateColumns:"1fr 80px 80px 120px 180px",gap:16,padding:"12px 20px",borderBottom:`1px solid ${T.border}`,alignItems:"center",cursor:"pointer"}},
+          React.createElement("div",null,
+            React.createElement("div",{style:{fontFamily:mono,fontSize:11,color:T.accent,marginBottom:2}},hasAnomaly&&React.createElement("span",{style:{color:T.danger,marginRight:6}},"●"),s.session_id?.slice(0,20),"..."),
+            React.createElement("div",{style:{fontFamily:mono,fontSize:10,color:T.text3}},fmtTs(s.created_at))
+          ),
+          React.createElement("div",{style:{fontFamily:mono,fontSize:12,color:T.text2,textAlign:"center"}},s.turn_count??0),
+          React.createElement("div",{style:{fontFamily:mono,fontSize:12,color:maxRisk>2.0?T.danger:T.text2,textAlign:"center"}},maxRisk.toFixed(2)),
+          React.createElement("div",{style:{textAlign:"center"}},
+            React.createElement("span",{style:{fontFamily:mono,fontSize:9,letterSpacing:"0.1em",textTransform:"uppercase",color:s.crescendo_detected?T.danger:T.text3,padding:"2px 6px",border:`1px solid ${s.crescendo_detected?T.danger:T.border2}`}},s.crescendo_detected?"ANOMALY":"CLEAN")
+          ),
+          React.createElement(TauChart,{trajectory:s.tau_trajectory,width:160,height:32})
+        );
+      }):React.createElement("div",{style:{padding:"60px 24px",textAlign:"center"}},
+        React.createElement("div",{style:{fontFamily:mono,fontSize:13,color:T.text3}},"No sessions recorded yet.")
+      )
+    ),
+    // Overview tab
+    tab==="overview"&&deployment&&React.createElement("div",{style:{padding:24}},
+      React.createElement("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:1,background:T.border,border:`1px solid ${T.border}`,marginBottom:24}},
+        ...[{label:"Total Requests",value:deployment.requests??0,color:T.accent},{label:"Alerts Fired",value:deployment.alerts??0,color:deployment.alerts>0?T.danger:T.text2},{label:"Sessions",value:sessions.length,color:T.accent},{label:"Status",value:(deployment.status||"—").toUpperCase(),color:statusColor(deployment.status)},{label:"Warmup",value:deployment.warmup_complete?"COMPLETE":"IN PROGRESS",color:deployment.warmup_complete?T.ok:T.warn},{label:"Traces",value:traces.length,color:T.accent}].map(({label,value,color})=>
+          React.createElement("div",{key:label,style:{background:T.bg,padding:24}},
+            React.createElement("div",{style:{fontFamily:mono,fontSize:9,letterSpacing:"0.15em",textTransform:"uppercase",color:T.text3,marginBottom:8}},label),
+            React.createElement("div",{style:{fontFamily:mono,fontSize:24,fontWeight:600,color,lineHeight:1}},value)
+          )
+        )
+      )
+    ),
+    selectedTrace&&React.createElement(TraceDetail,{trace:selectedTrace,onClose:()=>setSelectedTrace(null)})
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+</script>
+</body>
+</html>
