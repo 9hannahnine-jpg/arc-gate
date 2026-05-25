@@ -2232,16 +2232,22 @@ async def arc_replay_proxy(path: str, request: Request, x_arc_gate_key: str = He
     """Proxy API calls from Arc Replay page to avoid CORS/extension issues."""
     if not _check_api_key(x_arc_gate_key):
         raise HTTPException(status_code=401, detail="Invalid or missing X-Arc-Gate-Key")
-    import httpx as _httpx
-    params = dict(request.query_params)
-    async with _httpx.AsyncClient(timeout=10) as client:
-        r = await client.get(
-            f"http://localhost:{os.environ.get('PORT', '8080')}/sentry/{path}",
-            headers={"X-Arc-Gate-Key": x_arc_gate_key},
-            params=params
-        )
-    from fastapi.responses import JSONResponse as _JR
-    return _JR(content=r.json(), status_code=r.status_code)
+    try:
+        params = dict(request.query_params)
+        port = os.environ.get("PORT", "8080")
+        import httpx as _httpx2
+        async with _httpx2.AsyncClient(timeout=10) as _client:
+            _r = await _client.get(
+                f"http://127.0.0.1:{port}/sentry/{path}",
+                headers={"X-Arc-Gate-Key": x_arc_gate_key},
+                params=params
+            )
+        from fastapi.responses import Response as _Resp
+        return _Resp(content=_r.content, status_code=_r.status_code, media_type="application/json")
+    except Exception as _e:
+        print(f"[REPLAY PROXY] error: {_e}")
+        from fastapi.responses import JSONResponse as _JR2
+        return _JR2({"error": str(_e)}, status_code=500)
 
 @app.get("/arc-replay/api/{path:path}")
 async def arc_replay_proxy(path: str, request: Request, x_arc_gate_key: str = Header(None)):
