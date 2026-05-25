@@ -1114,9 +1114,9 @@ def _init_pg_db():
         UNIQUE(session_id, deployment_id)
     )""")
     cur.execute("""CREATE TABLE IF NOT EXISTS demo_usage (
-        "key" TEXT PRIMARY KEY,
+        key TEXT PRIMARY KEY,
         request_count INTEGER DEFAULT 0,
-        last_request TIMESTAMP
+        last_request TIMESTAMP DEFAULT NOW()
     )""")
     conn.commit()
     cur.close()
@@ -1180,6 +1180,11 @@ def _init_sqlite_db():
         crescendo_detected INTEGER DEFAULT 0,
         crescendo_turn INTEGER DEFAULT 0,
         created_at REAL, updated_at REAL)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS demo_usage (
+        key TEXT PRIMARY KEY,
+        request_count INTEGER DEFAULT 0,
+        last_request TEXT
+    )""")
     conn.commit(); conn.close()
     print("[DB] Ready: " + DB_PATH)
 
