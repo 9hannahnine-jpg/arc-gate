@@ -2272,7 +2272,7 @@ async def deployment_detail(deployment_id: str, model_version: str = None, auth=
             "created_at": s.created_at, "last_seen": s.last_seen}
 
 @app.get("/sentry/deployments/{deployment_id}/traces")
-async def deployment_traces(deployment_id: str, model_version: str = "default", limit: int = 50, auth=Depends(auth)):
+async def deployment_traces(deployment_id: str, model_version: str = None, limit: int = 50, auth=Depends(auth)):
     return {"deployment_id": deployment_id, "traces": get_traces(deployment_id, model_version, limit)}
 
 @app.get("/sentry/deployments/{deployment_id}/cost")
