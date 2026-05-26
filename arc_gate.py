@@ -929,6 +929,10 @@ INJECTION_PHRASES = [
     "encoded instruction", "base64 command",
     # Structural prompt injection markers
     "[system]", "im_start", "### system",
+    "<!-- system:", "<!-- note to ai", "<!-- ai assistant",
+    "<!-- instruction", "<!-- important",
+    "[system note", "[ai note", "[instruction",
+    "note for ai", "notice for ai",
     "by the way, ignore", "also, ignore", "p.s. ignore",
     "ignore all your previous", "now ignore all",
     "your new instructions are", "your instructions are now",
