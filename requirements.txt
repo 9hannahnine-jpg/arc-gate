@@ -8,5 +8,5 @@ transformers
 accelerate
 scikit-learn
 psycopg2-binary
-arc-memory
+arcmemory-bendex
 git+https://github.com/9hannahnine-jpg/arc-sentry.git
