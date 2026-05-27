@@ -23,6 +23,24 @@ except ImportError:
     _MEMORY_ENABLED = False
     print('[MEMORY] arc_memory not installed — memory monitoring disabled')
 
+try:
+    from arc_approve.core import ApprovalGate, RiskLevel
+    _APPROVE_SLACK_TOKEN = os.environ.get('ARC_APPROVE_SLACK_TOKEN', '')
+    _APPROVE_CHANNEL = os.environ.get('ARC_APPROVE_SLACK_CHANNEL', '#ai-approvals')
+    if _APPROVE_SLACK_TOKEN:
+        _approval_gate = ApprovalGate(
+            slack_token=_APPROVE_SLACK_TOKEN,
+            slack_channel=_APPROVE_CHANNEL,
+        )
+        _APPROVE_ENABLED = True
+        print('[APPROVE] Human-in-the-loop approval enabled')
+    else:
+        _APPROVE_ENABLED = False
+        print('[APPROVE] ARC_APPROVE_SLACK_TOKEN not set — approval disabled')
+except ImportError:
+    _APPROVE_ENABLED = False
+    print('[APPROVE] arcapprove-bendex not installed — approval disabled')
+
 _PG_URL = (
     os.environ.get('DATABASE_URL', '') or
     'postgresql://{}:{}@{}:{}/{}'.format(
@@ -379,6 +397,65 @@ def _log_restricted_continue(reason: str, payload: dict):
     policy = _restricted_metadata(reason)
     removed = [k for k in ("tools", "functions", "tool_choice", "parallel_tool_calls") if k in payload]
     print(f"[RESTRICTED_CONTINUE] enforcing reason={reason} removed={removed} policy={json.dumps(policy, sort_keys=True)}")
+
+_HIGH_RISK_TOOL_KEYWORDS = (
+    "send", "email", "slack", "post", "message", "transfer", "payment",
+    "wire", "bank", "purchase", "refund", "delete", "write", "update",
+    "execute", "run", "shell", "browser", "navigate", "deploy", "admin",
+)
+
+def _tool_call_name(tool_call: dict) -> str:
+    if not isinstance(tool_call, dict):
+        return ""
+    fn = tool_call.get("function") or {}
+    if isinstance(fn, dict) and fn.get("name"):
+        return str(fn.get("name") or "")
+    return str(tool_call.get("name") or tool_call.get("tool") or "")
+
+def _high_risk_tool_calls(payload: dict) -> list:
+    names = []
+    for msg in payload.get("messages") or []:
+        if not isinstance(msg, dict):
+            continue
+        for tool_call in msg.get("tool_calls") or []:
+            name = _tool_call_name(tool_call)
+            if name and any(k in name.lower() for k in _HIGH_RISK_TOOL_KEYWORDS):
+                names.append(name)
+        function_call = msg.get("function_call")
+        if isinstance(function_call, dict):
+            name = str(function_call.get("name") or "")
+            if name and any(k in name.lower() for k in _HIGH_RISK_TOOL_KEYWORDS):
+                names.append(name)
+    return names
+
+def _approval_granted(result) -> bool:
+    if isinstance(result, bool):
+        return result
+    if isinstance(result, dict):
+        return bool(result.get("approved") or result.get("granted") or result.get("ok"))
+    return bool(getattr(result, "approved", False) or getattr(result, "granted", False))
+
+async def _request_tool_approval(tool_names: list, session_id: str, payload: dict) -> bool:
+    risk_level = getattr(RiskLevel, "HIGH", None) or getattr(RiskLevel, "high", None) or "high"
+    context = {
+        "tool_names": tool_names,
+        "session_id": session_id,
+        "model": payload.get("model"),
+    }
+    try:
+        result = await _approval_gate.request_approval(
+            action="high_risk_tool_call",
+            risk_level=risk_level,
+            reason="High-risk tool call requested through Arc Gate proxy",
+            context=context,
+        )
+    except TypeError:
+        result = await _approval_gate.request_approval(
+            "high_risk_tool_call",
+            risk_level,
+            context,
+        )
+    return _approval_granted(result)
 
 # ══════════════════════════════════════════════════════════════
 # GEOMETRIC SESSION MONITOR — Nine (2026) Paper 7
@@ -3343,6 +3420,36 @@ async def proxy(request: Request, path: str,
             hdrs["authorization"] = f"Bearer {_real_key}"
         else:
             return _auth_error_response(503, "Demo mode unavailable: OPENAI_API_KEY not configured on server.")
+
+    if _APPROVE_ENABLED and is_json:
+        _approval_tool_names = _high_risk_tool_calls(body_dict)
+        if _approval_tool_names:
+            try:
+                _approved = await _request_tool_approval(_approval_tool_names, session_id or "", body_dict)
+            except Exception as _approve_e:
+                print(f"[APPROVE] approval request failed: {_approve_e}")
+                _approved = False
+            if not _approved:
+                print('[TRACE] saving trace for', did)
+                save_trace(did, version, str(uuid.uuid4())[:8],
+                    (body_dict.get('messages') or [{}])[-1].get('content','')[:500] if is_json else '',
+                    '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked', 0.0, time.time())
+                return JSONResponse(status_code=200, content={
+                    "id": "blocked",
+                    "object": "chat.completion",
+                    "choices": [{"index": 0, "message": {
+                        "role": "assistant",
+                        "content": "[BLOCKED by Arc Gate — high-risk tool call requires human approval]"
+                    }, "finish_reason": "stop"}],
+                    "model": body_dict.get("model", "unknown"),
+                    "arc_sentry": _arc_sentry_response(
+                        blocked=True, decision="blocked", layer="approval_gate",
+                        reason="human_approval_denied", severity="high", confidence=1.0,
+                        triggered_layers=[{"layer":"approval_gate","signal":"high_risk_tool_call","score":1.0}],
+                        extra={"tool_calls": _approval_tool_names},
+                        policy_mode_override=_request_policy_mode,
+                    )
+                })
 
     if is_inf and is_json and body_dict.get("stream", False):
         _stream_payload = apply_restricted_continue(body_dict) if _RESTRICTED_CONTINUE else body_dict

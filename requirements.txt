@@ -9,4 +9,5 @@ accelerate
 scikit-learn
 psycopg2-binary
 arcmemory-bendex
+arcapprove-bendex
 git+https://github.com/9hannahnine-jpg/arc-sentry.git
