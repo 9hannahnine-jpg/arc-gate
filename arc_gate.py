@@ -14,6 +14,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, JSONResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.security import APIKeyHeader as _APIKeyHeader
 
+try:
+    from arc_memory.core import InContextMemoryMonitor, MemoryStatus
+    _memory_monitor = InContextMemoryMonitor()
+    _MEMORY_ENABLED = True
+    print('[MEMORY] Memory integrity monitoring enabled')
+except ImportError:
+    _MEMORY_ENABLED = False
+    print('[MEMORY] arc_memory not installed — memory monitoring disabled')
+
 _PG_URL = (
     os.environ.get('DATABASE_URL', '') or
     'postgresql://{}:{}@{}:{}/{}'.format(
@@ -3663,6 +3672,13 @@ async def proxy(request: Request, path: str,
         cost = calc_cost(body_dict.get("model", "") if is_json else "", in_tok, out_tok)
         print('[TRACE] saving trace for', did)
         save_trace(did, version, req_id, prompt, response, in_tok, out_tok, latency_ms, cost, "not_computed", 0.0, rt)
+        if _MEMORY_ENABLED and is_json and session_id:
+            try:
+                _mem_result = _memory_monitor.observe(body_dict.get('messages', []))
+                if _mem_result.status in ('drift', 'compromised'):
+                    print(f'[MEMORY] drift detected session={session_id} tau_mem={_mem_result.tau_mem:.4f} status={_mem_result.status}')
+            except Exception as _me:
+                print(f'[MEMORY] error: {_me}')
 
         def _save_session_snapshot(tau_value=None, combined_score=0.0, update_last=False):
             if not session_id:
