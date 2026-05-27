@@ -301,6 +301,24 @@ function fmtTs(ts) {
 function fmtMs(ms) { return ms ? Math.round(ms) + 'ms' : '—'; }
 function fmtCost(c) { return c ? '$' + Number(c).toFixed(6) : '—'; }
 
+const LAYER_LABELS = {
+  'blocked_authority_sm': 'Authority state machine',
+  'blocked_llm_judge': 'LLM judge',
+  'blocked_phrase': 'Phrase pattern',
+  'blocked_tfidf': 'TF-IDF classifier',
+  'blocked_geo_drift': 'Geometric drift',
+  'blocked_geo': 'Geometric check',
+  'blocked_probe': 'Residual probe',
+  'blocked_crescendo': 'Crescendo detection',
+  'blocked_approve': 'Approval gate',
+  'blocked': 'Blocked',
+};
+
+function layerLabel(status) {
+  if (!status) return '—';
+  return LAYER_LABELS[status] || status.replace('blocked_','').replace(/_/g,' ');
+}
+
 function decBadge(status) {
   if (!status) return '<span class="dec dec-other">—</span>';
   const s = status.toLowerCase();
@@ -409,7 +427,7 @@ function renderAll() {
       <tr onclick="openDetail(${JSON.stringify(t).replace(/"/g,'&quot;')})">
         <td class="mono accent">${t.request_id||'—'}</td>
         <td>${(t.prompt||'—').slice(0,80)}</td>
-        <td class="mono" style="color:var(--danger)">${t.layer||'pattern match'}</td>
+        <td class="mono" style="color:var(--danger)">${layerLabel(t.drift_status)}</td>
         <td class="mono">${fmtTs(t.timestamp)}</td>
       </tr>`).join('');
   }
