@@ -1589,6 +1589,30 @@ def debug_traces():
     except Exception as e:
         return {"error": str(e)}
 
+def get_trace_deployment_summary(deployment_id):
+    try:
+        if _USE_PG:
+            conn = _pg_connect()
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM traces WHERE deployment_id=%s", (deployment_id,))
+            count_row = cur.fetchone()
+            cur.execute("SELECT drift_status FROM traces WHERE deployment_id=%s ORDER BY timestamp DESC LIMIT 1", (deployment_id,))
+            status_row = cur.fetchone()
+            cur.close()
+            conn.close()
+        else:
+            conn = sqlite3.connect(DB_PATH)
+            count_row = conn.execute("SELECT COUNT(*) FROM traces WHERE deployment_id=?", (deployment_id,)).fetchone()
+            status_row = conn.execute("SELECT drift_status FROM traces WHERE deployment_id=? ORDER BY timestamp DESC LIMIT 1", (deployment_id,)).fetchone()
+            conn.close()
+        return {
+            "requests": int((count_row or [0])[0] or 0),
+            "status": (status_row[0] if status_row and status_row[0] else "unknown"),
+        }
+    except Exception as e:
+        print(f"[DB] get_trace_deployment_summary: {e}")
+        return {"requests": 0, "status": "unknown"}
+
 def get_cost_summary(did, version=None):
     try:
         if _USE_PG:
@@ -2817,8 +2841,9 @@ async def deployment_detail(deployment_id: str, model_version: str = None, auth=
     if s is None: s = load_state(deployment_id, model_version)
     cost = get_cost_summary(deployment_id, model_version)
     if s is None:
+        trace_summary = get_trace_deployment_summary(deployment_id)
         return {"deployment_id": deployment_id, "model_version": model_version,
-                "status": "unknown", "step": 0, "requests": 0,
+                "status": trace_summary["status"], "step": 0, "requests": trace_summary["requests"],
                 "alerts": 0, "warmup_complete": False,
                 "drift_type": None, "confidence": 0.0, "cost_summary": cost}
     return {"deployment_id": deployment_id, "model_version": model_version,
