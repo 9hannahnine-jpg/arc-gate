@@ -2408,6 +2408,14 @@ async def arc_replay_proxy(path: str, request: Request, x_arc_gate_key: str = He
 
 
 
+@app.get("/console")
+async def console_page():
+    from fastapi.responses import HTMLResponse
+    import os as _os
+    _p = _os.path.join(_os.path.dirname(__file__), "console.html")
+    with open(_p) as f:
+        return HTMLResponse(f.read())
+
 @app.get("/demo")
 async def demo_page():
     from fastapi.responses import HTMLResponse
