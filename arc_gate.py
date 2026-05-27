@@ -3319,7 +3319,7 @@ async def proxy(request: Request, path: str,
                     print('[TRACE] saving trace for', did)
                     save_trace(did, version, str(uuid.uuid4())[:8],
                         (body_dict.get('messages') or [{}])[-1].get('content','')[:500] if is_json else '',
-                        '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked', 0.0, time.time())
+                        '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked_authority_sm', 0.0, time.time())
                     return JSONResponse(status_code=200, content={
                         "id":"blocked","object":"chat.completion",
                         "choices":[{"index":0,"message":{"role":"assistant",
@@ -3370,7 +3370,7 @@ async def proxy(request: Request, path: str,
                 print('[TRACE] saving trace for', did)
                 save_trace(did, version, str(uuid.uuid4())[:8],
                     (body_dict.get('messages') or [{}])[-1].get('content','')[:500] if is_json else '',
-                    '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked', 0.0, time.time())
+                    '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked_authority_sm', 0.0, time.time())
                 return JSONResponse(status_code=200, content={
                     "id":"blocked","object":"chat.completion",
                     "choices":[{"index":0,"message":{"role":"assistant",
@@ -3466,7 +3466,7 @@ async def proxy(request: Request, path: str,
                 print('[TRACE] saving trace for', did)
                 save_trace(did, version, str(uuid.uuid4())[:8],
                     (body_dict.get('messages') or [{}])[-1].get('content','')[:500] if is_json else '',
-                    '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked', 0.0, time.time())
+                    '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked_approve', 0.0, time.time())
                 return JSONResponse(status_code=200, content={
                     "id": "blocked",
                     "object": "chat.completion",
@@ -3505,7 +3505,7 @@ async def proxy(request: Request, path: str,
             print('[TRACE] saving trace for', did)
             save_trace(did, version, str(uuid.uuid4())[:8],
                 (body_dict.get('messages') or [{}])[-1].get('content','')[:500] if is_json else '',
-                '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked', 0.0, time.time())
+                '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked_phrase', 0.0, time.time())
             return JSONResponse(status_code=200, content={
                 "id": "blocked", "object": "chat.completion",
                 "choices": [{"index": 0, "message": {"role": "assistant",
@@ -3530,7 +3530,7 @@ async def proxy(request: Request, path: str,
             print('[TRACE] saving trace for', did)
             save_trace(did, version, str(uuid.uuid4())[:8],
                 (body_dict.get('messages') or [{}])[-1].get('content','')[:500] if is_json else '',
-                '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked', 0.0, time.time())
+                '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked_phrase', 0.0, time.time())
             return JSONResponse(status_code=200, content={
                 "id":"blocked","object":"chat.completion",
                 "choices":[{"index":0,"message":{"role":"assistant","content":"[BLOCKED by Arc Gate — prompt injection detected]"},"finish_reason":"stop"}],
@@ -3556,7 +3556,7 @@ async def proxy(request: Request, path: str,
                 print('[TRACE] saving trace for', did)
                 save_trace(did, version, str(uuid.uuid4())[:8],
                     (body_dict.get('messages') or [{}])[-1].get('content','')[:500] if is_json else '',
-                    '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked', 0.0, time.time())
+                    '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked_probe', 0.0, time.time())
                 return JSONResponse(status_code=200, content={
                     "id":"blocked","object":"chat.completion",
                     "choices":[{"index":0,"message":{"role":"assistant",
@@ -3580,7 +3580,7 @@ async def proxy(request: Request, path: str,
                 print('[TRACE] saving trace for', did)
                 save_trace(did, version, str(uuid.uuid4())[:8],
                     (body_dict.get('messages') or [{}])[-1].get('content','')[:500] if is_json else '',
-                    '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked', 0.0, time.time())
+                    '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked_tfidf', 0.0, time.time())
                 return JSONResponse(status_code=200, content={
                     "id":"blocked","object":"chat.completion",
                     "choices":[{"index":0,"message":{"role":"assistant","content":"[BLOCKED by Arc Gate — policy violation detected]"},"finish_reason":"stop"}],
@@ -3603,7 +3603,7 @@ async def proxy(request: Request, path: str,
                     print('[TRACE] saving trace for', did)
                     save_trace(did, version, str(uuid.uuid4())[:8],
                         (body_dict.get('messages') or [{}])[-1].get('content','')[:500] if is_json else '',
-                        '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked', 0.0, time.time())
+                        '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked_llm_judge', 0.0, time.time())
                     return JSONResponse(status_code=200, content={
                         "id":"blocked","object":"chat.completion",
                         "choices":[{"index":0,"message":{"role":"assistant","content":"[BLOCKED by Arc Gate — verified harmful]"},"finish_reason":"stop"}],
@@ -3653,7 +3653,7 @@ async def proxy(request: Request, path: str,
                 print('[TRACE] saving trace for', did)
                 save_trace(did, version, str(uuid.uuid4())[:8],
                     (body_dict.get('messages') or [{}])[-1].get('content','')[:500] if is_json else '',
-                    '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked', 0.0, time.time())
+                    '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked_geo_drift', 0.0, time.time())
                 return JSONResponse(status_code=200, content={
                     "id":"blocked","object":"chat.completion",
                     "choices":[{"index":0,"message":{"role":"assistant",
@@ -3699,7 +3699,7 @@ async def proxy(request: Request, path: str,
                     print('[TRACE] saving trace for', did)
                     save_trace(did, version, str(uuid.uuid4())[:8],
                         (body_dict.get('messages') or [{}])[-1].get('content','')[:500] if is_json else '',
-                        '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked', 0.0, time.time())
+                        '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked_tfidf', 0.0, time.time())
                     return JSONResponse(status_code=200, content={
                         "id":"blocked","object":"chat.completion",
                         "choices":[{"index":0,"message":{"role":"assistant","content":"[BLOCKED by Arc Gate — behavioral direction]"},"finish_reason":"stop"}],
@@ -3723,7 +3723,7 @@ async def proxy(request: Request, path: str,
                         print('[TRACE] saving trace for', did)
                         save_trace(did, version, str(uuid.uuid4())[:8],
                             (body_dict.get('messages') or [{}])[-1].get('content','')[:500] if is_json else '',
-                            '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked', 0.0, time.time())
+                            '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked_llm_judge', 0.0, time.time())
                         return JSONResponse(status_code=200, content={
                             "id":"blocked","object":"chat.completion",
                             "choices":[{"index":0,"message":{"role":"assistant","content":"[BLOCKED by Arc Gate — verified harmful]"},"finish_reason":"stop"}],
@@ -3764,7 +3764,7 @@ async def proxy(request: Request, path: str,
             print('[TRACE] saving trace for', did)
             save_trace(did, version, str(uuid.uuid4())[:8],
                 (body_dict.get('messages') or [{}])[-1].get('content','')[:500] if is_json else '',
-                '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked', 0.0, time.time())
+                '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked_geo', 0.0, time.time())
             return JSONResponse(status_code=200, content={
                 "id":"blocked","object":"chat.completion",
                 "choices":[{"index":0,"message":{"role":"assistant","content":"[BLOCKED by Arc Gate — semantic injection detected]"},"finish_reason":"stop"}],
@@ -3994,7 +3994,7 @@ async def proxy(request: Request, path: str,
                 print('[TRACE] saving trace for', did)
                 save_trace(did, version, str(uuid.uuid4())[:8],
                     (body_dict.get('messages') or [{}])[-1].get('content','')[:500] if is_json else '',
-                    '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked', 0.0, time.time())
+                    '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked_crescendo', 0.0, time.time())
                 return JSONResponse(status_code=200, content={
                     "id": rb.get("id", "blocked"),
                     "object": "chat.completion",
