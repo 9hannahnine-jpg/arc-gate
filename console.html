@@ -325,6 +325,7 @@ function decBadge(status) {
   if (s.includes('block')) return '<span class="dec dec-block">✕ Blocked</span>';
   if (s.includes('restrict')) return '<span class="dec dec-restrict">⚠ Restricted</span>';
   if (s.includes('stable') || s === 'allow' || s === 'allowed') return '<span class="dec dec-safe">✓ Safe</span>';
+  if (s === 'not_computed') return '<span class="dec dec-other" style="opacity:0.4">—</span>';
   return `<span class="dec dec-other">${status}</span>`;
 }
 
@@ -390,9 +391,10 @@ function renderAll() {
     const s = (t.drift_status||'').toLowerCase();
     return s.includes('stable') || s === 'allow' || s === 'allowed';
   });
+  const computed = _traces.filter(t => t.drift_status && t.drift_status !== 'not_computed');
   const total = _traces.length;
   const blockedCount = blocked.length;
-  const rate = total > 0 ? Math.round((safe.length / total) * 100) : 100;
+  const rate = computed.length > 0 ? Math.round((safe.length / computed.length) * 100) : 100;
 
   // Health pill
   const pill = document.getElementById('health-pill');
