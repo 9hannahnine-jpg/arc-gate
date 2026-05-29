@@ -392,10 +392,10 @@ function renderAll() {
     const s = (t.drift_status||'').toLowerCase();
     return s.includes('stable') || s === 'allow' || s === 'allowed';
   });
-  const computed = _traces.filter(t => t.drift_status && t.drift_status !== 'not_computed');
+  const computed = _traces.filter(t => t.drift_status && t.drift_status !== 'not_computed' && t.drift_status !== 'warmup');
   const total = _traces.length;
   const blockedCount = blocked.length;
-  const rate = computed.length > 0 ? Math.round((safe.length / computed.length) * 100) : 100;
+  const rate = computed.length > 0 ? Math.round(((computed.length - blocked.filter(t => t.drift_status && t.drift_status !== 'not_computed').length) / computed.length) * 100) : 100;
 
   // Health pill
   const pill = document.getElementById('health-pill');
