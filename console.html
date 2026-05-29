@@ -173,8 +173,8 @@ body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-ser
           <div class="ov-lbl">Threats blocked</div>
         </div>
         <div class="ov-card">
-          <div class="ov-val" style="color:var(--ok)" id="ov-rate">—</div>
-          <div class="ov-lbl">Protection rate</div>
+          <div class="ov-val" style="color:var(--accent)" id="ov-rate">—</div>
+          <div class="ov-lbl">Avg latency</div>
         </div>
         <div class="ov-card">
           <div class="ov-val" style="color:var(--accent)" id="ov-sessions">—</div>
@@ -417,7 +417,9 @@ function renderAll() {
   const ovBlocked = document.getElementById('ov-blocked');
   ovBlocked.textContent = blockedCount;
   ovBlocked.style.color = blockedCount > 0 ? 'var(--danger)' : 'var(--ok)';
-  document.getElementById('ov-rate').textContent = rate + '%';
+  const withLatency = _traces.filter(t => t.latency_ms && t.latency_ms > 0);
+  const avgLatency = withLatency.length > 0 ? Math.round(withLatency.reduce((a,t) => a + t.latency_ms, 0) / withLatency.length) : 0;
+  document.getElementById('ov-rate').textContent = avgLatency ? avgLatency + 'ms' : '—';
   document.getElementById('ov-sessions').textContent = _sessions.length;
   document.getElementById('ov-traces').textContent = total;
 
