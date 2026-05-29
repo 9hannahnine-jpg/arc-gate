@@ -2430,6 +2430,215 @@ async def debug_traces_endpoint(x_arc_gate_key: str = Header(None)):
         raise HTTPException(status_code=401, detail="Invalid or missing X-Arc-Gate-Key")
     return debug_traces()
 
+
+# ── Signup / Key Provisioning ─────────────────────────────────────────────────
+
+def _generate_key(prefix="demo"):
+    import secrets
+    return f"{prefix}-{secrets.token_hex(10)}"
+
+def _create_user(email: str):
+    """Create a new user with demo key and deployment ID. Returns (deployment_id, api_key)."""
+    import secrets
+    dep_id = f"dep-{secrets.token_hex(4)}"
+    api_key = _generate_key("demo")
+    try:
+        if _USE_PG:
+            conn = _pg_connect()
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    email TEXT PRIMARY KEY,
+                    deployment_id TEXT UNIQUE,
+                    api_key TEXT UNIQUE,
+                    key_type TEXT DEFAULT 'demo',
+                    request_count INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """)
+            cur.execute(
+                "INSERT INTO users (email, deployment_id, api_key, key_type) VALUES (%s, %s, %s, 'demo') ON CONFLICT (email) DO NOTHING RETURNING deployment_id, api_key",
+                (email, dep_id, api_key)
+            )
+            row = cur.fetchone()
+            conn.commit()
+            cur.close()
+            conn.close()
+            if row:
+                return row[0], row[1]
+            else:
+                # Email already exists, return existing
+                conn = _pg_connect()
+                cur = conn.cursor()
+                cur.execute("SELECT deployment_id, api_key FROM users WHERE email=%s", (email,))
+                row = cur.fetchone()
+                cur.close()
+                conn.close()
+                return row[0], row[1]
+    except Exception as e:
+        print(f"[SIGNUP] create_user error: {e}")
+        return None, None
+
+def _send_welcome_email(email: str, deployment_id: str, api_key: str):
+    """Send welcome email with API key via SendGrid."""
+    import json as _json
+    sg_key = os.environ.get("SENDGRID_API_KEY", "")
+    from_email = os.environ.get("SENDGRID_FROM_EMAIL", "noreply@bendexgeometry.com")
+    if not sg_key:
+        print("[SIGNUP] No SENDGRID_API_KEY set")
+        return False
+    payload = {
+        "personalizations": [{"to": [{"email": email}]}],
+        "from": {"email": from_email, "name": "Bendex Arc"},
+        "subject": "Your Bendex Arc API key",
+        "content": [{
+            "type": "text/html",
+            "value": f"""<!DOCTYPE html>
+<html>
+<body style="background:#0d1117;color:#e6edf3;font-family:'IBM Plex Mono',monospace;padding:40px;max-width:560px;margin:0 auto;">
+<div style="margin-bottom:32px;">
+  <span style="font-size:13px;font-weight:600;letter-spacing:0.12em;">BENDEX</span><span style="color:#79c0ff;">.</span><span style="color:#8b949e;font-size:13px;">ARC</span>
+</div>
+<h1 style="font-size:22px;font-weight:600;margin-bottom:8px;color:#e6edf3;">You're in.</h1>
+<p style="color:#8b949e;margin-bottom:32px;font-size:14px;line-height:1.7;">Here's everything you need to start using Bendex Arc.</p>
+
+<div style="background:#161b22;border:1px solid #30363d;padding:20px;margin-bottom:16px;">
+  <div style="font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:#484f58;margin-bottom:8px;">Your API Key</div>
+  <div style="font-size:14px;color:#79c0ff;">{api_key}</div>
+</div>
+
+<div style="background:#161b22;border:1px solid #30363d;padding:20px;margin-bottom:32px;">
+  <div style="font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:#484f58;margin-bottom:8px;">Your Deployment ID</div>
+  <div style="font-size:14px;color:#79c0ff;">{deployment_id}</div>
+</div>
+
+<div style="margin-bottom:32px;">
+  <div style="font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:#484f58;margin-bottom:12px;">Quick Start</div>
+  <div style="background:#161b22;border:1px solid #21262d;padding:16px;font-size:12px;color:#8b949e;line-height:2;">
+    from openai import OpenAI<br><br>
+    client = OpenAI(<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;api_key="{api_key}",<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;base_url="https://web-production-6e47f.up.railway.app/v1"<br>
+    )<br>
+  </div>
+</div>
+
+<div style="margin-bottom:32px;">
+  <div style="font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:#484f58;margin-bottom:12px;">Your Console</div>
+  <p style="font-size:13px;color:#8b949e;margin-bottom:12px;">See your traces, blocked attacks, and session data.</p>
+  <a href="https://web-production-6e47f.up.railway.app/console" style="display:inline-block;background:#79c0ff;color:#0d1117;font-size:11px;font-weight:600;padding:10px 20px;text-decoration:none;letter-spacing:0.06em;">Open Console →</a>
+</div>
+
+<p style="font-size:12px;color:#484f58;line-height:1.7;">Free tier includes 500 requests. Questions? Reply to this email.<br>bendexgeometry.com</p>
+</body>
+</html>"""
+        }]
+    }
+    try:
+        req = urllib.request.Request(
+            "https://api.sendgrid.com/v3/mail/send",
+            data=_json.dumps(payload).encode(),
+            headers={"Authorization": f"Bearer {sg_key}", "Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req) as r:
+            print(f"[SIGNUP] Email sent to {email}, status={r.status}")
+            return True
+    except Exception as e:
+        print(f"[SIGNUP] Email error: {e}")
+        return False
+
+
+@app.get("/signup")
+async def signup_page():
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse("""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Bendex Arc — Get Started Free</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#0d1117;color:#e6edf3;font-family:'IBM Plex Sans',sans-serif;font-size:14px;min-height:100vh;display:flex;align-items:center;justify-content:center;}
+.box{width:440px;padding:48px;border:1px solid #30363d;background:#161b22;}
+.logo{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.12em;margin-bottom:32px;}
+.logo span{color:#79c0ff;}
+h1{font-family:'IBM Plex Mono',monospace;font-size:24px;font-weight:600;margin-bottom:8px;}
+.sub{font-size:13px;color:#8b949e;margin-bottom:32px;line-height:1.7;}
+label{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.15em;text-transform:uppercase;color:#484f58;display:block;margin-bottom:6px;}
+input{width:100%;background:#1c2128;border:1px solid #30363d;color:#e6edf3;font-family:'IBM Plex Mono',monospace;font-size:13px;padding:12px;outline:none;box-sizing:border-box;}
+input:focus{border-color:#79c0ff;}
+.btn{width:100%;padding:12px;background:#79c0ff;color:#0d1117;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.08em;border:none;cursor:pointer;margin-top:16px;}
+.btn:hover{background:#58a6ff;}
+.btn:disabled{opacity:0.5;cursor:not-allowed;}
+.note{font-size:11px;color:#484f58;margin-top:16px;line-height:1.6;text-align:center;}
+.error{font-family:'IBM Plex Mono',monospace;font-size:11px;color:#f85149;margin-top:12px;display:none;}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="logo">BENDEX<span>.</span>ARC</div>
+  <h1>Get started free.</h1>
+  <p class="sub">Enter your email and get your personal API key instantly. 500 free requests. No credit card.</p>
+  <label>Email address</label>
+  <input type="email" id="email" placeholder="you@company.com"/>
+  <div class="error" id="error"></div>
+  <button class="btn" id="btn" onclick="signup()">Get my free key →</button>
+  <p class="note">Your key will be emailed to you. No spam, ever.</p>
+</div>
+<script>
+async function signup() {
+  const email = document.getElementById('email').value.trim();
+  if (!email) return;
+  const btn = document.getElementById('btn');
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+  try {
+    const r = await fetch('/signup', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email})
+    });
+    const d = await r.json();
+    if (r.ok) {
+      document.querySelector('.box').innerHTML = '<div class="logo">BENDEX<span style=\"color:#79c0ff\">.</span>ARC</div><h1 style=\"margin-bottom:16px\">Check your email.</h1><p class=\"sub\">Your API key is on its way to ' + email + '. Check your inbox and spam folder.</p><p style=\"font-size:12px;color:#484f58;margin-top:32px\">Once you have your key, open the <a href=\"/console\" style=\"color:#79c0ff\">Bendex Arc Console</a>.</p>';
+    } else {
+      document.getElementById('error').textContent = d.error || 'Something went wrong.';
+      document.getElementById('error').style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Get my free key →';
+    }
+  } catch(e) {
+    document.getElementById('error').textContent = 'Network error. Try again.';
+    document.getElementById('error').style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Get my free key →';
+  }
+}
+document.getElementById('email').addEventListener('keydown', e => { if(e.key === 'Enter') signup(); });
+</script>
+</body>
+</html>""")
+
+@app.post("/signup")
+async def signup_submit(request: Request):
+    from fastapi.responses import JSONResponse
+    try:
+        body = await request.json()
+        email = (body.get("email") or "").strip().lower()
+        if not email or "@" not in email:
+            return JSONResponse({"error": "Valid email required"}, status_code=400)
+        dep_id, api_key = _create_user(email)
+        if not dep_id:
+            return JSONResponse({"error": "Could not create account"}, status_code=500)
+        _send_welcome_email(email, dep_id, api_key)
+        return JSONResponse({"ok": True, "deployment_id": dep_id})
+    except Exception as e:
+        print(f"[SIGNUP] error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 @app.get("/sentry/health")
 async def health():
     return {"status": "ok", "version": "1.0", "upstream": UPSTREAM_URL,
