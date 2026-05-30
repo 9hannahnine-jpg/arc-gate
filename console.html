@@ -3,196 +3,297 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Arc Gate Console</title>
+<title>Bendex Arc Console</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 :root{
-  --bg:#0d1117;--bg2:#161b22;--bg3:#1c2128;
-  --border:#21262d;--border2:#30363d;
-  --text:#e6edf3;--text2:#8b949e;--text3:#484f58;
-  --accent:#79c0ff;--accent2:#58a6ff;
-  --danger:#f85149;--warn:#d29922;--ok:#2ea043;
+  --bg:#0a0e14;--bg2:#111620;--bg3:#161d2a;--bg4:#1a2235;
+  --border:#1e2a3a;--border2:#243040;
+  --text:#e2e8f0;--text2:#7c8fa6;--text3:#3d5068;
+  --accent:#3b82f6;--accent2:#60a5fa;--accent-glow:rgba(59,130,246,0.15);
+  --danger:#ef4444;--danger-glow:rgba(239,68,68,0.12);
+  --warn:#f59e0b;--ok:#10b981;--ok-glow:rgba(16,185,129,0.12);
+  --purple:#8b5cf6;
 }
 html,body{height:100%;margin:0;}
 body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-size:13px;line-height:1.6;display:flex;flex-direction:column;min-height:100vh;}
 *{scrollbar-width:thin;scrollbar-color:var(--border2) transparent;}
+input,select,button{font-family:inherit;}
 
-/* Auth */
-#auth-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;}
-.auth-box{width:400px;padding:40px;border:1px solid var(--border2);background:var(--bg2);}
-.auth-logo{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.2em;color:var(--accent);margin-bottom:8px;text-transform:uppercase;opacity:0.7;}
-.auth-title{font-family:'IBM Plex Mono',monospace;font-size:24px;font-weight:600;color:var(--text);margin-bottom:24px;}
-.auth-label{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.15em;text-transform:uppercase;color:var(--text3);display:block;margin-bottom:6px;}
-.auth-input{width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:10px 12px;outline:none;margin-bottom:16px;}
-.auth-input:focus{border-color:var(--accent);}
-.auth-btn{width:100%;padding:11px;background:var(--accent);color:var(--bg);font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.08em;border:none;cursor:pointer;margin-top:4px;}
+/* ── Auth ── */
+#auth-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:radial-gradient(ellipse at 50% 0%,rgba(59,130,246,0.08) 0%,transparent 60%),var(--bg);}
+.auth-card{width:420px;padding:48px;background:var(--bg2);border:1px solid var(--border2);border-radius:2px;position:relative;}
+.auth-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);}
+.auth-logo{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.15em;color:var(--text2);margin-bottom:4px;text-transform:uppercase;}
+.auth-logo span{color:var(--accent);}
+.auth-badge{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);background:var(--accent-glow);border:1px solid rgba(59,130,246,0.3);padding:2px 8px;margin-bottom:28px;}
+.auth-title{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:600;color:var(--text);margin-bottom:6px;}
+.auth-sub{font-size:13px;color:var(--text2);margin-bottom:32px;line-height:1.6;}
+.field{margin-bottom:20px;}
+.field-label{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.15em;text-transform:uppercase;color:var(--text3);display:block;margin-bottom:8px;}
+.field-input{width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:11px 14px;outline:none;transition:border-color 0.15s;}
+.field-input:focus{border-color:var(--accent);background:var(--bg4);}
+.field-input::placeholder{color:var(--text3);}
+.auth-btn{width:100%;padding:12px;background:var(--accent);color:#fff;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.1em;border:none;cursor:pointer;margin-top:8px;transition:background 0.15s;}
 .auth-btn:hover{background:var(--accent2);}
-.auth-error{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--danger);margin-top:12px;display:none;}
+.auth-btn:disabled{opacity:0.4;cursor:not-allowed;}
+.auth-error{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--danger);margin-top:12px;padding:8px 12px;background:var(--danger-glow);border:1px solid rgba(239,68,68,0.2);display:none;}
+.auth-footer{font-size:11px;color:var(--text3);margin-top:20px;text-align:center;}
+.auth-footer a{color:var(--accent);text-decoration:none;}
 
-/* App */
+/* ── App shell ── */
 #app{display:none;flex-direction:column;min-height:100vh;}
 
 /* Topbar */
-.topbar{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:52px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:50;flex-shrink:0;}
-.tb-left{display:flex;align-items:center;gap:16px;}
-.tb-logo{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.12em;}
+.topbar{height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50;flex-shrink:0;}
+.tb-brand{display:flex;align-items:center;gap:12px;}
+.tb-logo{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;letter-spacing:0.12em;color:var(--text);}
 .tb-logo span{color:var(--accent);}
-.tb-dep{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text3);}
-.health-pill{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;padding:3px 10px;border:1px solid;display:none;}
-.health-protected{color:var(--ok);border-color:var(--ok);background:rgba(46,160,67,0.08);}
-.health-threats{color:var(--danger);border-color:var(--danger);background:rgba(248,81,73,0.08);}
-.tb-right{display:flex;align-items:center;gap:20px;}
-.tb-stat{text-align:center;}
-.tb-stat-val{font-family:'IBM Plex Mono',monospace;font-size:14px;line-height:1;}
-.tb-stat-lbl{font-family:'IBM Plex Mono',monospace;font-size:8px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-top:2px;}
-.tb-btn{background:none;border:1px solid var(--border2);color:var(--text3);font-family:'IBM Plex Mono',monospace;font-size:10px;padding:4px 10px;cursor:pointer;}
+.tb-sep{color:var(--text3);font-size:16px;font-weight:200;}
+.tb-dep{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text2);}
+.health-pill{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;padding:3px 10px;border:1px solid;display:none;border-radius:1px;}
+.health-protected{color:var(--ok);border-color:rgba(16,185,129,0.4);background:var(--ok-glow);}
+.health-threats{color:var(--danger);border-color:rgba(239,68,68,0.4);background:var(--danger-glow);}
+.tb-right{display:flex;align-items:center;gap:24px;}
+.tb-metric{text-align:center;}
+.tb-metric-val{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;line-height:1;}
+.tb-metric-lbl{font-family:'IBM Plex Mono',monospace;font-size:8px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-top:2px;}
+.tb-divider{width:1px;height:28px;background:var(--border2);}
+.tb-btn{background:none;border:1px solid var(--border2);color:var(--text2);font-family:'IBM Plex Mono',monospace;font-size:10px;padding:5px 12px;cursor:pointer;transition:all 0.15s;}
 .tb-btn:hover{border-color:var(--accent);color:var(--accent);}
+.tb-btn-ghost{background:none;border:none;color:var(--text3);font-family:'IBM Plex Mono',monospace;font-size:10px;padding:5px 8px;cursor:pointer;}
+.tb-btn-ghost:hover{color:var(--text2);}
 
 /* Tabs */
-.tabbar{display:flex;border-bottom:1px solid var(--border);background:var(--bg2);padding:0 24px;flex-shrink:0;}
-.tab{background:none;border:none;border-bottom:2px solid transparent;color:var(--text3);font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;padding:12px 20px;cursor:pointer;transition:all 0.15s;}
+.tabbar{display:flex;background:var(--bg2);border-bottom:1px solid var(--border);padding:0 24px;flex-shrink:0;}
+.tab{background:none;border:none;border-bottom:2px solid transparent;color:var(--text3);font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;padding:14px 20px;cursor:pointer;transition:all 0.15s;display:flex;align-items:center;gap:8px;}
 .tab:hover{color:var(--text2);}
 .tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.tab-icon{width:14px;height:14px;opacity:0.6;}
+.tab.active .tab-icon{opacity:1;}
 
 /* Content */
-.content{flex:1;overflow-y:auto;padding:24px;}
-.tab-panel{display:none;}
+.content{flex:1;overflow-y:auto;background:var(--bg);}
+.tab-panel{display:none;padding:28px;}
 .tab-panel.active{display:block;}
-.slbl{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:var(--text3);margin-bottom:16px;display:flex;align-items:center;gap:10px;}
-.slbl::before{content:'';width:16px;height:1px;background:var(--accent);}
 
-/* Overview cards */
-.ov-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:32px;}
-.ov-card{background:var(--bg2);padding:20px 24px;}
-.ov-val{font-family:'IBM Plex Mono',monospace;font-size:26px;font-weight:600;line-height:1;margin-bottom:6px;}
-.ov-lbl{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);}
+/* Section header */
+.sec-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+.sec-title{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:var(--text3);display:flex;align-items:center;gap:10px;}
+.sec-title::before{content:'';width:16px;height:1px;background:var(--accent);opacity:0.6;}
 
-/* Tables */
-.tbl{width:100%;border-collapse:collapse;table-layout:fixed;}
-.tbl th{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);padding:10px 14px;border-bottom:1px solid var(--border);text-align:left;font-weight:400;background:var(--bg2);white-space:nowrap;}
-.tbl td{padding:10px 14px;border-bottom:1px solid var(--border);font-size:12px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.tbl tr:hover td{background:var(--bg2);cursor:pointer;}
-.tbl tr:last-child td{border-bottom:none;}
-.tbl td.mono{font-family:'IBM Plex Mono',monospace;font-size:11px;}
-.tbl td.accent{color:var(--accent);}
+/* Stat cards */
+.stat-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:28px;}
+.stat-card{background:var(--bg2);border:1px solid var(--border);padding:20px 24px;position:relative;overflow:hidden;}
+.stat-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;}
+.stat-card.card-requests::after{background:linear-gradient(90deg,transparent,var(--accent),transparent);}
+.stat-card.card-blocked::after{background:linear-gradient(90deg,transparent,var(--danger),transparent);}
+.stat-card.card-latency::after{background:linear-gradient(90deg,transparent,var(--ok),transparent);}
+.stat-card.card-sessions::after{background:linear-gradient(90deg,transparent,var(--accent),transparent);}
+.stat-card.card-traces::after{background:linear-gradient(90deg,transparent,var(--purple),transparent);}
+.stat-val{font-family:'IBM Plex Mono',monospace;font-size:28px;font-weight:600;line-height:1;margin-bottom:8px;}
+.stat-lbl{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);}
+.stat-sub{font-size:11px;color:var(--text3);margin-top:4px;}
+
+/* Table */
+.data-table{width:100%;border-collapse:collapse;background:var(--bg2);border:1px solid var(--border);}
+.data-table th{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);padding:12px 16px;border-bottom:1px solid var(--border);text-align:left;font-weight:400;white-space:nowrap;background:var(--bg3);}
+.data-table td{padding:11px 16px;border-bottom:1px solid var(--border);font-size:12px;color:var(--text2);max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.data-table tr:last-child td{border-bottom:none;}
+.data-table tr:hover td{background:var(--bg3);cursor:pointer;}
+.data-table td.mono{font-family:'IBM Plex Mono',monospace;font-size:11px;}
+.data-table td.accent{color:var(--accent2);}
+.col-id{width:100px;}
+.col-content{width:auto;}
+.col-decision{width:130px;}
+.col-layer{width:200px;}
+.col-lat{width:80px;}
+.col-cost{width:90px;}
+.col-time{width:100px;}
+.col-num{width:40px;}
 
 /* Decision badges */
-.dec{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.06em;padding:2px 8px;border:1px solid;white-space:nowrap;display:inline-block;}
-.dec-block{color:var(--danger);border-color:var(--danger);background:rgba(248,81,73,0.06);}
-.dec-safe{color:var(--ok);border-color:var(--ok);background:rgba(46,160,67,0.06);}
-.dec-restrict{color:var(--warn);border-color:var(--warn);background:rgba(210,153,34,0.06);}
-.dec-other{color:var(--text3);border-color:var(--border2);}
+.badge{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.06em;padding:3px 9px;border:1px solid;white-space:nowrap;display:inline-flex;align-items:center;gap:5px;}
+.badge::before{content:'';width:5px;height:5px;border-radius:50%;flex-shrink:0;}
+.badge-blocked{color:var(--danger);border-color:rgba(239,68,68,0.3);background:var(--danger-glow);}
+.badge-blocked::before{background:var(--danger);}
+.badge-safe{color:var(--ok);border-color:rgba(16,185,129,0.3);background:var(--ok-glow);}
+.badge-safe::before{background:var(--ok);}
+.badge-restrict{color:var(--warn);border-color:rgba(245,158,11,0.3);background:rgba(245,158,11,0.08);}
+.badge-restrict::before{background:var(--warn);}
+.badge-other{color:var(--text3);border-color:var(--border2);}
+.badge-other::before{background:var(--text3);}
+
+/* Status badges */
+.status-badge{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.08em;text-transform:uppercase;padding:2px 8px;border:1px solid;}
+.status-clean{color:var(--ok);border-color:rgba(16,185,129,0.3);background:var(--ok-glow);}
+.status-anomaly{color:var(--danger);border-color:rgba(239,68,68,0.3);background:var(--danger-glow);}
+.status-elevated{color:var(--warn);border-color:rgba(245,158,11,0.3);}
+
+/* Empty state */
+.empty-state{padding:60px 24px;text-align:center;}
+.empty-icon{font-size:32px;margin-bottom:12px;opacity:0.3;}
+.empty-title{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--text2);margin-bottom:6px;}
+.empty-sub{font-size:12px;color:var(--text3);}
 
 /* Detail panel */
-.detail{position:fixed;top:0;right:0;bottom:0;width:480px;background:var(--bg2);border-left:1px solid var(--border2);overflow-y:auto;z-index:100;display:none;flex-direction:column;}
+.detail{position:fixed;top:0;right:0;bottom:0;width:500px;background:var(--bg2);border-left:1px solid var(--border2);overflow-y:auto;z-index:100;display:none;flex-direction:column;}
 .detail.open{display:flex;}
-.detail-hdr{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg2);}
-.detail-hdr-title{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent);}
+.detail-topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg2);}
+.detail-topbar-title{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent);}
 .detail-close{background:none;border:1px solid var(--border2);color:var(--text2);font-family:'IBM Plex Mono',monospace;font-size:10px;padding:4px 10px;cursor:pointer;}
-.detail-body{padding:20px;}
-.detail-sec{margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--border);}
-.detail-sec:last-child{border-bottom:none;}
-.detail-lbl{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.15em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;}
-.detail-val{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text);}
-.detail-txt{font-size:12px;color:var(--text2);line-height:1.7;background:var(--bg3);border:1px solid var(--border);padding:12px;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto;}
-.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-.detail-metric{background:var(--bg3);border:1px solid var(--border);padding:10px 12px;}
-.dm-lbl{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text3);margin-bottom:4px;letter-spacing:0.1em;text-transform:uppercase;}
-.dm-val{font-family:'IBM Plex Mono',monospace;font-size:14px;color:var(--accent);}
+.detail-close:hover{border-color:var(--accent);color:var(--accent);}
+.detail-content{padding:24px;flex:1;}
+.detail-section{margin-bottom:24px;padding-bottom:24px;border-bottom:1px solid var(--border);}
+.detail-section:last-child{border-bottom:none;margin-bottom:0;}
+.detail-label{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.15em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;}
+.detail-value{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text);}
+.detail-text{font-size:12px;color:var(--text2);line-height:1.7;background:var(--bg3);border:1px solid var(--border);padding:14px;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto;}
+.detail-metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+.detail-metric{background:var(--bg3);border:1px solid var(--border);padding:12px 14px;}
+.dm-label{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text3);margin-bottom:5px;letter-spacing:0.1em;text-transform:uppercase;}
+.dm-value{font-family:'IBM Plex Mono',monospace;font-size:15px;color:var(--accent2);font-weight:500;}
 
-/* Tau mini chart */
+/* Tau chart */
 .tau-svg{display:inline-block;vertical-align:middle;}
 
+/* Memory cards */
+.mem-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px;}
+.mem-card{background:var(--bg2);border:1px solid var(--border);padding:20px;}
+.mem-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.mem-session{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--accent2);}
+.mem-status-ok{color:var(--ok);font-family:'IBM Plex Mono',monospace;font-size:10px;}
+.mem-status-warn{color:var(--warn);font-family:'IBM Plex Mono',monospace;font-size:10px;}
+.mem-status-bad{color:var(--danger);font-family:'IBM Plex Mono',monospace;font-size:10px;}
+.mem-signal{font-size:11px;color:var(--text3);margin-top:4px;}
+
 @media(max-width:900px){
-  .ov-grid{grid-template-columns:repeat(3,1fr);}
+  .stat-grid{grid-template-columns:repeat(2,1fr);}
   .detail{width:100%;}
+  .mem-grid{grid-template-columns:1fr;}
 }
 </style>
 </head>
 <body>
 
+<!-- Auth -->
 <div id="auth-screen">
-  <div class="auth-box">
-    <div class="auth-logo">Arc Gate</div>
-    <div class="auth-title">Console</div>
-    <label class="auth-label">Deployment ID</label>
-    <input class="auth-input" id="auth-dep" type="text" placeholder="arc-gate-demo" value="arc-gate-demo"/>
-    <label class="auth-label">API Key</label>
-    <input class="auth-input" id="auth-key" type="password" placeholder="ag-..."/>
-    <button class="auth-btn" onclick="connect()">Connect →</button>
+  <div class="auth-card">
+    <div class="auth-logo">BENDEX<span>.</span>ARC</div>
+    <div class="auth-badge">Console</div>
+    <div class="auth-title">Sign in</div>
+    <div class="auth-sub">Access your deployment dashboard, traces, and governance data.</div>
+    <div class="field">
+      <label class="field-label">Deployment ID</label>
+      <input class="field-input" id="auth-dep" type="text" placeholder="dep-xxxxxxxx"/>
+    </div>
+    <div class="field">
+      <label class="field-label">API Key</label>
+      <input class="field-input" id="auth-key" type="password" placeholder="demo-xxxxxxxx or ag-xxxxxxxx"/>
+    </div>
+    <button class="auth-btn" id="auth-btn" onclick="connect()">Sign in →</button>
     <div class="auth-error" id="auth-error"></div>
+    <div class="auth-footer">Don't have an account? <a href="https://web-production-6e47f.up.railway.app/signup" target="_blank">Get started free →</a></div>
   </div>
 </div>
 
+<!-- App -->
 <div id="app">
+
+  <!-- Topbar -->
   <div class="topbar">
-    <div class="tb-left">
-      <div class="tb-logo">ARC<span>.</span>GATE</div>
+    <div class="tb-brand">
+      <div class="tb-logo">BENDEX<span>.</span>ARC</div>
+      <div class="tb-sep">/</div>
       <div class="tb-dep" id="tb-dep">—</div>
       <div class="health-pill" id="health-pill"></div>
     </div>
     <div class="tb-right">
-      <div class="tb-stat">
-        <div class="tb-stat-val" id="tb-requests" style="color:var(--accent)">—</div>
-        <div class="tb-stat-lbl">Proxied</div>
+      <div class="tb-metric">
+        <div class="tb-metric-val" id="tb-proxied" style="color:var(--accent2)">—</div>
+        <div class="tb-metric-lbl">Proxied</div>
       </div>
-      <div class="tb-stat">
-        <div class="tb-stat-val" id="tb-blocked" style="color:var(--text2)">—</div>
-        <div class="tb-stat-lbl">Blocked</div>
+      <div class="tb-metric">
+        <div class="tb-metric-val" id="tb-blocked" style="color:var(--text2)">—</div>
+        <div class="tb-metric-lbl">Blocked</div>
       </div>
-      <div class="tb-stat">
-        <div class="tb-stat-val" id="tb-sessions" style="color:var(--accent)">—</div>
-        <div class="tb-stat-lbl">Sessions</div>
+      <div class="tb-metric">
+        <div class="tb-metric-val" id="tb-sessions" style="color:var(--accent2)">—</div>
+        <div class="tb-metric-lbl">Sessions</div>
       </div>
+      <div class="tb-divider"></div>
       <button class="tb-btn" onclick="refresh()">↺ Refresh</button>
-      <a href="/demo" target="_blank" class="tb-btn" style="text-decoration:none">Live demo →</a>
-      <button class="tb-btn" onclick="signout()">Sign out</button>
+      <a href="https://web-production-6e47f.up.railway.app/demo" target="_blank" class="tb-btn" style="text-decoration:none">Live demo →</a>
+      <button class="tb-btn-ghost" onclick="signout()">Sign out</button>
     </div>
   </div>
 
+  <!-- Tabs -->
   <div class="tabbar">
-    <button class="tab active" onclick="switchTab('overview',this)">Overview</button>
-    <button class="tab" onclick="switchTab('traces',this)">Traces</button>
-    <button class="tab" onclick="switchTab('sessions',this)">Sessions</button>
-    <button class="tab" onclick="switchTab('memory',this)">Memory</button>
+    <button class="tab active" onclick="switchTab('overview',this)">
+      <svg class="tab-icon" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+      Overview
+    </button>
+    <button class="tab" onclick="switchTab('traces',this)">
+      <svg class="tab-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M1 3h14v1.5H1zm0 4h14v1.5H1zm0 4h8v1.5H1z"/></svg>
+      Traces
+    </button>
+    <button class="tab" onclick="switchTab('sessions',this)">
+      <svg class="tab-icon" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4v4l3 2" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+      Sessions
+    </button>
+    <button class="tab" onclick="switchTab('memory',this)">
+      <svg class="tab-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a5 5 0 100 10A5 5 0 008 1zm0 8a3 3 0 110-6 3 3 0 010 6z"/><path d="M8 11v4M5 13h6"/></svg>
+      Memory Integrity
+    </button>
   </div>
 
+  <!-- Content -->
   <div class="content">
 
     <!-- Overview -->
     <div class="tab-panel active" id="panel-overview">
-      <div class="slbl">Deployment summary</div>
-      <div class="ov-grid">
-        <div class="ov-card">
-          <div class="ov-val" style="color:var(--accent)" id="ov-proxied">—</div>
-          <div class="ov-lbl">Requests proxied</div>
+      <div class="sec-header">
+        <div class="sec-title">Deployment summary</div>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-card card-requests">
+          <div class="stat-val" style="color:var(--accent2)" id="ov-proxied">—</div>
+          <div class="stat-lbl">Requests proxied</div>
+          <div class="stat-sub">All governed requests</div>
         </div>
-        <div class="ov-card">
-          <div class="ov-val" id="ov-blocked">—</div>
-          <div class="ov-lbl">Threats blocked</div>
+        <div class="stat-card card-blocked">
+          <div class="stat-val" id="ov-blocked">—</div>
+          <div class="stat-lbl">Threats blocked</div>
+          <div class="stat-sub">Unsafe actions prevented</div>
         </div>
-        <div class="ov-card">
-          <div class="ov-val" style="color:var(--accent)" id="ov-rate">—</div>
-          <div class="ov-lbl">Avg latency</div>
+        <div class="stat-card card-latency">
+          <div class="stat-val" style="color:var(--ok)" id="ov-latency">—</div>
+          <div class="stat-lbl">Avg latency</div>
+          <div class="stat-sub">Governance overhead</div>
         </div>
-        <div class="ov-card">
-          <div class="ov-val" style="color:var(--accent)" id="ov-sessions">—</div>
-          <div class="ov-lbl">Sessions</div>
+        <div class="stat-card card-sessions">
+          <div class="stat-val" style="color:var(--accent2)" id="ov-sessions">—</div>
+          <div class="stat-lbl">Sessions</div>
+          <div class="stat-sub">Multi-turn conversations</div>
         </div>
-        <div class="ov-card">
-          <div class="ov-val" style="color:var(--accent)" id="ov-traces">—</div>
-          <div class="ov-lbl">Traces stored</div>
+        <div class="stat-card card-traces">
+          <div class="stat-val" style="color:var(--purple)" id="ov-traces">—</div>
+          <div class="stat-lbl">Traces stored</div>
+          <div class="stat-sub">Full audit history</div>
         </div>
       </div>
 
-      <div class="slbl">Recent blocked requests</div>
-      <table class="tbl" style="table-layout:fixed;">
+      <div class="sec-header" style="margin-top:8px;">
+        <div class="sec-title">Recent blocked requests</div>
+      </div>
+      <table class="data-table" style="table-layout:fixed;">
         <colgroup>
-          <col style="width:110px"/>
-          <col style="width:auto"/>
-          <col style="width:160px"/>
-          <col style="width:100px"/>
+          <col class="col-id"/>
+          <col class="col-content"/>
+          <col class="col-layer"/>
+          <col class="col-time"/>
         </colgroup>
         <thead><tr>
           <th>Request ID</th>
@@ -206,15 +307,18 @@ body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-ser
 
     <!-- Traces -->
     <div class="tab-panel" id="panel-traces">
-      <div class="slbl">All traces — click to inspect</div>
-      <table class="tbl" style="table-layout:fixed;">
+      <div class="sec-header">
+        <div class="sec-title">All traces</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text3)">Click any row to inspect</div>
+      </div>
+      <table class="data-table" style="table-layout:fixed;">
         <colgroup>
-          <col style="width:36px"/>
-          <col style="width:auto"/>
-          <col style="width:120px"/>
-          <col style="width:90px"/>
-          <col style="width:90px"/>
-          <col style="width:90px"/>
+          <col class="col-num"/>
+          <col class="col-content"/>
+          <col class="col-decision"/>
+          <col class="col-lat"/>
+          <col class="col-cost"/>
+          <col class="col-time"/>
         </colgroup>
         <thead><tr>
           <th>#</th>
@@ -230,14 +334,16 @@ body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-ser
 
     <!-- Sessions -->
     <div class="tab-panel" id="panel-sessions">
-      <div class="slbl">Sessions</div>
-      <table class="tbl" style="table-layout:fixed;">
+      <div class="sec-header">
+        <div class="sec-title">Sessions</div>
+      </div>
+      <table class="data-table" style="table-layout:fixed;">
         <colgroup>
           <col style="width:auto"/>
-          <col style="width:80px"/>
+          <col style="width:70px"/>
+          <col style="width:90px"/>
           <col style="width:100px"/>
-          <col style="width:100px"/>
-          <col style="width:180px"/>
+          <col style="width:200px"/>
           <col style="width:100px"/>
         </colgroup>
         <thead><tr>
@@ -254,23 +360,11 @@ body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-ser
 
     <!-- Memory -->
     <div class="tab-panel" id="panel-memory">
-      <div class="slbl">Memory integrity</div>
-      <p style="font-size:13px;color:var(--text3);margin-bottom:20px;max-width:560px;line-height:1.7;">Tracks identity drift, contradictions, and forgotten facts across multi-turn sessions. Powered by the Bendex Geometry geometric framework.</p>
-      <table class="tbl" style="table-layout:fixed;">
-        <colgroup>
-          <col style="width:auto"/>
-          <col style="width:80px"/>
-          <col style="width:140px"/>
-          <col style="width:auto"/>
-        </colgroup>
-        <thead><tr>
-          <th>Session</th>
-          <th>Turns</th>
-          <th>Memory status</th>
-          <th>Signals</th>
-        </tr></thead>
-        <tbody id="memory-body"></tbody>
-      </table>
+      <div class="sec-header">
+        <div class="sec-title">Memory integrity monitoring</div>
+      </div>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:24px;max-width:580px;line-height:1.7;">Tracks identity drift, contradictions, and forgotten facts across multi-turn sessions using geometric behavioral analysis. Powered by the Bendex Arc geometric framework.</p>
+      <div id="memory-grid"></div>
     </div>
 
   </div>
@@ -278,29 +372,16 @@ body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-ser
 
 <!-- Detail panel -->
 <div class="detail" id="detail">
-  <div class="detail-hdr">
-    <div class="detail-hdr-title">Request Detail</div>
+  <div class="detail-topbar">
+    <div class="detail-topbar-title">Request detail</div>
     <button class="detail-close" onclick="closeDetail()">✕ Close</button>
   </div>
-  <div class="detail-body" id="detail-body"></div>
+  <div class="detail-content" id="detail-content"></div>
 </div>
 
 <script>
 const BASE = 'https://web-production-6e47f.up.railway.app';
 let API_KEY = '', DEP_ID = '', _traces = [], _sessions = [], _dep = null;
-
-async function api(path) {
-  const r = await fetch(BASE + path, { headers: { 'X-Arc-Gate-Key': API_KEY } });
-  if (!r.ok) throw new Error(r.status + ' ' + r.statusText);
-  return r.json();
-}
-
-function fmtTs(ts) {
-  if (!ts) return '—';
-  return new Date(ts * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
-function fmtMs(ms) { return ms ? Math.round(ms) + 'ms' : '—'; }
-function fmtCost(c) { return c ? '$' + Number(c).toFixed(6) : '—'; }
 
 const LAYER_LABELS = {
   'blocked_authority_sm': 'Authority state machine',
@@ -315,19 +396,32 @@ const LAYER_LABELS = {
   'blocked': 'Blocked',
 };
 
-function layerLabel(status) {
-  if (!status) return '—';
-  return LAYER_LABELS[status] || status.replace('blocked_','').replace(/_/g,' ');
+function layerLabel(s) {
+  if (!s) return '—';
+  return LAYER_LABELS[s] || s.replace('blocked_','').replace(/_/g,' ');
 }
 
+async function api(path) {
+  const r = await fetch(BASE + path, { headers: { 'X-Arc-Gate-Key': API_KEY } });
+  if (!r.ok) throw new Error(r.status + ' ' + r.statusText);
+  return r.json();
+}
+
+function fmtTs(ts) {
+  if (!ts) return '—';
+  return new Date(ts * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+function fmtMs(ms) { return ms ? Math.round(ms) + 'ms' : '—'; }
+function fmtCost(c) { return c ? '$' + Number(c).toFixed(6) : '—'; }
+
 function decBadge(status) {
-  if (!status) return '<span class="dec dec-other">—</span>';
+  if (!status) return '<span class="badge badge-other">—</span>';
   const s = status.toLowerCase();
-  if (s.includes('block')) return '<span class="dec dec-block">✕ Blocked</span>';
-  if (s.includes('restrict')) return '<span class="dec dec-restrict">⚠ Restricted</span>';
-  if (s.includes('stable') || s === 'allow' || s === 'allowed') return '<span class="dec dec-safe">✓ Safe</span>';
-  if (s === 'not_computed') return '<span class="dec dec-other" style="opacity:0.4">—</span>';
-  return `<span class="dec dec-other">${status}</span>`;
+  if (s.includes('block')) return '<span class="badge badge-blocked">Blocked</span>';
+  if (s.includes('restrict')) return '<span class="badge badge-restrict">Restricted</span>';
+  if (s.includes('stable') || s === 'allow' || s === 'allowed') return '<span class="badge badge-safe">Safe</span>';
+  if (s === 'not_computed') return '<span class="badge badge-other" style="opacity:0.4">—</span>';
+  return `<span class="badge badge-other">${status}</span>`;
 }
 
 function tauChart(traj, w=160, h=32) {
@@ -345,10 +439,31 @@ function tauChart(traj, w=160, h=32) {
   return `<svg class="tau-svg" width="${w}" height="${h}"><line x1="0" y1="${ty}" x2="${w}" y2="${ty}" stroke="var(--warn)" stroke-width="1" stroke-dasharray="3,3" opacity="0.4"/><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="1.5"/>${dots}</svg>`;
 }
 
+// Auth
+window.addEventListener('load', () => {
+  const savedKey = localStorage.getItem('arc_api_key');
+  const savedDep = localStorage.getItem('arc_dep_id');
+  if (savedKey && savedDep) {
+    document.getElementById('auth-key').value = savedKey;
+    document.getElementById('auth-dep').value = savedDep;
+    connect();
+  }
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('dep')) document.getElementById('auth-dep').value = params.get('dep');
+  if (params.get('key')) document.getElementById('auth-key').value = params.get('key');
+});
+
+['auth-key','auth-dep'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => { if(e.key==='Enter') connect(); });
+});
+
 async function connect() {
   const dep = document.getElementById('auth-dep').value.trim();
   const key = document.getElementById('auth-key').value.trim();
   if (!dep || !key) return;
+  const btn = document.getElementById('auth-btn');
+  btn.disabled = true;
+  btn.textContent = 'Connecting...';
   API_KEY = key; DEP_ID = dep;
   try {
     _dep = await api(`/sentry/deployments/${DEP_ID}`);
@@ -361,27 +476,10 @@ async function connect() {
     const err = document.getElementById('auth-error');
     err.textContent = 'Connection failed: ' + e.message;
     err.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Sign in →';
   }
 }
-
-// Auto-connect if saved credentials
-window.addEventListener('load', () => {
-  const savedKey = localStorage.getItem('arc_api_key');
-  const savedDep = localStorage.getItem('arc_dep_id');
-  if (savedKey && savedDep) {
-    document.getElementById('auth-key').value = savedKey;
-    document.getElementById('auth-dep').value = savedDep;
-    connect();
-  }
-  // Pre-fill from URL params
-  const params = new URLSearchParams(window.location.search);
-  if (params.get('dep')) document.getElementById('auth-dep').value = params.get('dep');
-  if (params.get('key')) document.getElementById('auth-key').value = params.get('key');
-});
-
-['auth-key','auth-dep'].forEach(id => {
-  document.getElementById(id).addEventListener('keydown', e => { if(e.key==='Enter') connect(); });
-});
 
 function signout() {
   API_KEY=''; DEP_ID=''; _traces=[]; _sessions=[]; _dep=null;
@@ -390,6 +488,9 @@ function signout() {
   document.getElementById('app').style.display='none';
   document.getElementById('auth-screen').style.display='flex';
   document.getElementById('auth-key').value='';
+  document.getElementById('auth-btn').disabled=false;
+  document.getElementById('auth-btn').textContent='Sign in →';
+  document.getElementById('auth-error').style.display='none';
 }
 
 async function loadAll() {
@@ -406,88 +507,80 @@ async function loadAll() {
 async function refresh() { await loadAll(); }
 
 function renderAll() {
-  const blocked = _traces.filter(t => (t.drift_status||'').toLowerCase().includes('block'));
-  const safe = _traces.filter(t => {
-    const s = (t.drift_status||'').toLowerCase();
-    return s.includes('stable') || s === 'allow' || s === 'allowed';
-  });
+  const blocked = _traces.filter(t => (t.drift_status||'').includes('block'));
   const computed = _traces.filter(t => t.drift_status && t.drift_status !== 'not_computed' && t.drift_status !== 'warmup');
-  const total = _traces.length;
-  const blockedCount = blocked.length;
-  const rate = computed.length > 0 ? Math.round(((computed.length - blocked.filter(t => t.drift_status && t.drift_status !== 'not_computed').length) / computed.length) * 100) : 100;
+  const withLatency = _traces.filter(t => t.latency_ms && t.latency_ms > 0);
+  const avgLat = withLatency.length ? Math.round(withLatency.reduce((a,t)=>a+t.latency_ms,0)/withLatency.length) : 0;
 
-  // Health pill
+  // Health
+  const recentBlocked = blocked.filter(t=>t.timestamp&&(Date.now()/1000-t.timestamp)<86400).length;
   const pill = document.getElementById('health-pill');
-  const recentBlocked = blocked.filter(t => t.timestamp && (Date.now()/1000 - t.timestamp) < 86400).length;
-  pill.textContent = recentBlocked > 0 ? '● THREATS DETECTED' : '✓ PROTECTED';
+  pill.textContent = recentBlocked > 0 ? '● Threats detected' : '✓ Protected';
   pill.className = 'health-pill ' + (recentBlocked > 0 ? 'health-threats' : 'health-protected');
   pill.style.display = 'inline-block';
 
   // Topbar
   document.getElementById('tb-dep').textContent = DEP_ID;
-  document.getElementById('tb-requests').textContent = total;
+  document.getElementById('tb-proxied').textContent = _traces.length;
   const tbBlocked = document.getElementById('tb-blocked');
-  tbBlocked.textContent = blockedCount;
-  tbBlocked.style.color = blockedCount > 0 ? 'var(--danger)' : 'var(--text2)';
+  tbBlocked.textContent = blocked.length;
+  tbBlocked.style.color = blocked.length > 0 ? 'var(--danger)' : 'var(--text2)';
   document.getElementById('tb-sessions').textContent = _sessions.length;
 
   // Overview cards
-  document.getElementById('ov-proxied').textContent = total;
+  document.getElementById('ov-proxied').textContent = _traces.length;
   const ovBlocked = document.getElementById('ov-blocked');
-  ovBlocked.textContent = blockedCount;
-  ovBlocked.style.color = blockedCount > 0 ? 'var(--danger)' : 'var(--ok)';
-  const withLatency = _traces.filter(t => t.latency_ms && t.latency_ms > 0);
-  const avgLatency = withLatency.length > 0 ? Math.round(withLatency.reduce((a,t) => a + t.latency_ms, 0) / withLatency.length) : 0;
-  document.getElementById('ov-rate').textContent = avgLatency ? avgLatency + 'ms' : '—';
+  ovBlocked.textContent = blocked.length;
+  ovBlocked.style.color = blocked.length > 0 ? 'var(--danger)' : 'var(--ok)';
+  document.getElementById('ov-latency').textContent = avgLat ? avgLat + 'ms' : '—';
   document.getElementById('ov-sessions').textContent = _sessions.length;
-  document.getElementById('ov-traces').textContent = total;
+  document.getElementById('ov-traces').textContent = _traces.length;
 
   // Blocked table
   const ob = document.getElementById('ov-blocked-body');
   if (!blocked.length) {
-    ob.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--ok);font-family:\'IBM Plex Mono\',monospace;font-size:11px;padding:24px">✓ No threats blocked yet</td></tr>';
+    ob.innerHTML = `<tr><td colspan="4"><div class="empty-state"><div class="empty-icon">🛡️</div><div class="empty-title">No threats blocked yet</div><div class="empty-sub">Your deployment is clean. Blocked requests will appear here.</div></div></td></tr>`;
   } else {
     ob.innerHTML = blocked.slice(0,10).map(t => `
       <tr onclick="openDetail(${JSON.stringify(t).replace(/"/g,'&quot;')})">
-        <td class="mono accent">${t.request_id||'—'}</td>
-        <td>${(t.prompt||'—').slice(0,80)}</td>
-        <td class="mono" style="color:var(--danger)">${layerLabel(t.drift_status)}</td>
-        <td class="mono">${fmtTs(t.timestamp)}</td>
+        <td class="mono accent col-id">${t.request_id||'—'}</td>
+        <td class="col-content">${(t.prompt||'—').slice(0,80)}</td>
+        <td class="mono col-layer" style="color:var(--danger)">${layerLabel(t.drift_status)}</td>
+        <td class="mono col-time">${fmtTs(t.timestamp)}</td>
       </tr>`).join('');
   }
 
   // Traces
   const tb = document.getElementById('traces-body');
   if (!_traces.length) {
-    tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text3);font-family:\'IBM Plex Mono\',monospace;font-size:11px;padding:32px">No traces yet</td></tr>';
+    tb.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">No traces yet</div><div class="empty-sub">Traces appear here once your agent starts making requests through Arc Gate.</div></div></td></tr>`;
   } else {
     tb.innerHTML = _traces.map((t,i) => `
       <tr onclick="openDetail(${JSON.stringify(t).replace(/"/g,'&quot;')})">
-        <td class="mono" style="color:var(--text3)">${i+1}</td>
-        <td>${(t.prompt||'—').slice(0,60)}</td>
-        <td>${decBadge(t.drift_status)}</td>
-        <td class="mono">${fmtMs(t.latency_ms)}</td>
-        <td class="mono" style="color:var(--text3)">${fmtCost(t.cost_usd)}</td>
-        <td class="mono" style="color:var(--text3)">${fmtTs(t.timestamp)}</td>
+        <td class="mono col-num" style="color:var(--text3)">${i+1}</td>
+        <td class="col-content">${(t.prompt||'—').slice(0,60)}</td>
+        <td class="col-decision">${decBadge(t.drift_status)}</td>
+        <td class="mono col-lat">${fmtMs(t.latency_ms)}</td>
+        <td class="mono col-cost" style="color:var(--text3)">${fmtCost(t.cost_usd)}</td>
+        <td class="mono col-time" style="color:var(--text3)">${fmtTs(t.timestamp)}</td>
       </tr>`).join('');
   }
 
   // Sessions
   const sb = document.getElementById('sessions-body');
   if (!_sessions.length) {
-    sb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text3);font-family:\'IBM Plex Mono\',monospace;font-size:11px;padding:32px">No sessions yet</td></tr>';
+    sb.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">🔄</div><div class="empty-title">No sessions yet</div><div class="empty-sub">Pass x-arc-session-id in your request headers to enable session tracking.</div></div></td></tr>`;
   } else {
     sb.innerHTML = _sessions.map(s => {
       const hasAnomaly = s.crescendo_detected;
       const maxRisk = (s.combined_scores||[]).filter(Boolean).reduce((a,b)=>Math.max(a,b),0);
-      const threatCount = 0; // future: count blocked traces per session
       const statusStr = hasAnomaly ? 'anomaly' : maxRisk > 2.0 ? 'elevated' : 'clean';
-      const statusColor = hasAnomaly ? 'var(--danger)' : maxRisk > 2.0 ? 'var(--warn)' : 'var(--ok)';
+      const statusClass = hasAnomaly ? 'status-anomaly' : maxRisk > 2.0 ? 'status-elevated' : 'status-clean';
       return `<tr>
-        <td class="mono accent">${hasAnomaly?'<span style="color:var(--danger);margin-right:4px">●</span>':''}${(s.session_id||'').slice(0,22)}...</td>
+        <td class="mono accent">${hasAnomaly?'<span style="color:var(--danger);margin-right:6px">●</span>':''}${(s.session_id||'').slice(0,24)}...</td>
         <td class="mono" style="text-align:center">${s.turn_count??0}</td>
-        <td class="mono" style="text-align:center;color:var(--text3)">${threatCount||'—'}</td>
-        <td style="color:${statusColor};font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.08em">${statusStr}</td>
+        <td class="mono" style="text-align:center;color:var(--text3)">—</td>
+        <td><span class="status-badge ${statusClass}">${statusStr}</span></td>
         <td>${tauChart(s.tau_trajectory)}</td>
         <td class="mono" style="color:var(--text3)">${fmtTs(s.created_at)}</td>
       </tr>`;
@@ -495,59 +588,62 @@ function renderAll() {
   }
 
   // Memory
-  const mb = document.getElementById('memory-body');
+  const mg = document.getElementById('memory-grid');
   if (!_sessions.length) {
-    mb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text3);font-family:\'IBM Plex Mono\',monospace;font-size:11px;padding:32px">No session data yet</td></tr>';
+    mg.innerHTML = `<div class="empty-state"><div class="empty-icon">🧠</div><div class="empty-title">No session data yet</div><div class="empty-sub">Memory monitoring activates after the first multi-turn session.</div></div>`;
   } else {
-    mb.innerHTML = _sessions.map(s => {
+    mg.innerHTML = '<div class="mem-grid">' + _sessions.map(s => {
       const traj = s.tau_trajectory||[];
       const last = traj.filter(v=>v!=null).slice(-1)[0];
       const TAU = 1.2247;
-      const memOk = last == null || last >= TAU;
-      const memStatus = last == null ? 'Insufficient data' : last < TAU*0.7 ? 'Drift detected' : last < TAU ? 'Drift detected' : 'Healthy';
-      const memColor = memOk ? 'var(--ok)' : 'var(--danger)';
+      const ok = last == null || last >= TAU;
+      const statusText = last == null ? 'Insufficient data' : last < TAU ? 'Drift detected' : 'Healthy';
+      const statusClass = ok ? 'mem-status-ok' : 'mem-status-bad';
       const signals = [];
       if (s.crescendo_detected) signals.push('Multi-turn escalation detected');
       if (last != null && last < TAU) signals.push('Memory drift signal');
-      return `<tr>
-        <td class="mono accent">${(s.session_id||'').slice(0,24)}...</td>
-        <td class="mono" style="text-align:center">${s.turn_count??0}</td>
-        <td style="color:${memColor};font-family:'IBM Plex Mono',monospace;font-size:11px">${memStatus}</td>
-        <td style="font-size:12px;color:var(--text3)">${signals.length?signals.join(' · '):'No anomalies'}</td>
-      </tr>`;
-    }).join('');
+      return `<div class="mem-card">
+        <div class="mem-card-header">
+          <div class="mem-session">${(s.session_id||'').slice(0,18)}...</div>
+          <div class="${statusClass}">${statusText}</div>
+        </div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text3)">Turns: ${s.turn_count??0}</div>
+        <div class="mem-signal">${signals.length ? signals.join(' · ') : 'No anomalies detected'}</div>
+      </div>`;
+    }).join('') + '</div>';
   }
 }
 
 function openDetail(t) {
   if (typeof t === 'string') t = JSON.parse(t);
   const s = (t.drift_status||'').toLowerCase();
-  const color = s.includes('block') ? 'var(--danger)' : s.includes('restrict') ? 'var(--warn)' : s.includes('stable') || s === 'allow' ? 'var(--ok)' : 'var(--text3)';
-  document.getElementById('detail-body').innerHTML = `
-    <div class="detail-sec">
+  const color = s.includes('block') ? 'var(--danger)' : s.includes('restrict') ? 'var(--warn)' : s.includes('stable')||s==='allow' ? 'var(--ok)' : 'var(--text3)';
+  document.getElementById('detail-content').innerHTML = `
+    <div class="detail-section">
       ${decBadge(t.drift_status)}
-      <div style="margin-top:12px">
-        <div class="detail-lbl">Request ID</div>
-        <div class="detail-val">${t.request_id||'—'}</div>
+      <div style="margin-top:16px">
+        <div class="detail-label">Request ID</div>
+        <div class="detail-value">${t.request_id||'—'}</div>
       </div>
+      ${t.drift_status && t.drift_status.includes('block') ? `<div style="margin-top:12px"><div class="detail-label">Blocked by</div><div class="detail-value" style="color:var(--danger)">${layerLabel(t.drift_status)}</div></div>` : ''}
     </div>
-    <div class="detail-sec">
-      <div class="detail-lbl">Content sent to proxy</div>
-      <div class="detail-txt">${(t.prompt||'—').replace(/</g,'&lt;')}</div>
+    <div class="detail-section">
+      <div class="detail-label">Content</div>
+      <div class="detail-text">${(t.prompt||'—').replace(/</g,'&lt;')}</div>
     </div>
-    <div class="detail-sec">
-      <div class="detail-lbl">Response</div>
-      <div class="detail-txt">${(t.response||'Blocked — upstream never called').replace(/</g,'&lt;')}</div>
+    <div class="detail-section">
+      <div class="detail-label">Response</div>
+      <div class="detail-text">${(t.response||'Blocked — upstream never called').replace(/</g,'&lt;')}</div>
     </div>
-    <div class="detail-sec">
-      <div class="detail-lbl">Metrics</div>
-      <div class="detail-grid">
-        <div class="detail-metric"><div class="dm-lbl">Latency</div><div class="dm-val">${fmtMs(t.latency_ms)}</div></div>
-        <div class="detail-metric"><div class="dm-lbl">Cost</div><div class="dm-val">${fmtCost(t.cost_usd)}</div></div>
-        <div class="detail-metric"><div class="dm-lbl">Input tokens</div><div class="dm-val">${t.input_tokens||'—'}</div></div>
-        <div class="detail-metric"><div class="dm-lbl">Output tokens</div><div class="dm-val">${t.output_tokens||'—'}</div></div>
-        <div class="detail-metric"><div class="dm-lbl">Time</div><div class="dm-val">${fmtTs(t.timestamp)}</div></div>
-        <div class="detail-metric"><div class="dm-lbl">Decision</div><div class="dm-val" style="color:${color}">${t.drift_status||'—'}</div></div>
+    <div class="detail-section">
+      <div class="detail-label">Metrics</div>
+      <div class="detail-metrics">
+        <div class="detail-metric"><div class="dm-label">Latency</div><div class="dm-value">${fmtMs(t.latency_ms)}</div></div>
+        <div class="detail-metric"><div class="dm-label">Cost</div><div class="dm-value">${fmtCost(t.cost_usd)}</div></div>
+        <div class="detail-metric"><div class="dm-label">Decision</div><div class="dm-value" style="color:${color};font-size:11px">${t.drift_status||'—'}</div></div>
+        <div class="detail-metric"><div class="dm-label">Input tokens</div><div class="dm-value">${t.input_tokens||'—'}</div></div>
+        <div class="detail-metric"><div class="dm-label">Output tokens</div><div class="dm-value">${t.output_tokens||'—'}</div></div>
+        <div class="detail-metric"><div class="dm-label">Time</div><div class="dm-value" style="font-size:11px">${fmtTs(t.timestamp)}</div></div>
       </div>
     </div>`;
   document.getElementById('detail').classList.add('open');
