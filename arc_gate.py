@@ -2565,6 +2565,22 @@ def _send_welcome_email(email: str, deployment_id: str, api_key: str):
         return False
 
 
+
+@app.post("/sentry/deployments/{deployment_id}/test")
+async def test_deployment(deployment_id: str, api_key: str = Depends(_api_key_header)):
+    if not check_api_key(api_key):
+        raise HTTPException(status_code=401, detail="Invalid or missing X-Arc-Gate-Key")
+    import uuid, time
+    req_id = str(uuid.uuid4())[:8]
+    ts = time.time()
+    save_trace(
+        deployment_id, "test", req_id,
+        "Test request from Bendex Arc Console onboarding",
+        "Connection verified. Bendex Arc is active on this deployment.",
+        10, 8, 95.0, 0.0, "stable", 1.2247, ts
+    )
+    return {"ok": True, "request_id": req_id}
+
 @app.get("/signup")
 async def signup_page():
     from fastapi.responses import HTMLResponse
