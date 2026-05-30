@@ -548,6 +548,25 @@ async function loadAll() {
 
 async function refresh() { await loadAll(); }
 
+async function runTestRequest() {
+  const btns = [document.getElementById('test-btn')].filter(Boolean);
+  const statuses = [document.getElementById('test-status'), document.getElementById('test-status-qs')].filter(Boolean);
+  btns.forEach(b => { b.disabled = true; b.textContent = 'Running...'; });
+  statuses.forEach(s => s.textContent = '');
+  try {
+    const r = await fetch(BASE + '/sentry/deployments/' + DEP_ID + '/test', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-Arc-Gate-Key': API_KEY}
+    });
+    const d = await r.json();
+    statuses.forEach(s => s.textContent = '✓ Test trace saved — check the Traces tab');
+    setTimeout(() => loadAll(), 2000);
+  } catch(e) {
+    statuses.forEach(s => s.textContent = 'Error: ' + e.message);
+    btns.forEach(b => { b.disabled = false; b.textContent = 'Run a test request →'; });
+  }
+}
+
 function renderQuickStart() {
   const qsKey = document.getElementById('qs-key');
   const qsDep = document.getElementById('qs-dep');
