@@ -354,6 +354,8 @@ async function connect() {
     _dep = await api(`/sentry/deployments/${DEP_ID}`);
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
+    localStorage.setItem('arc_api_key', key);
+    localStorage.setItem('arc_dep_id', dep);
     await loadAll();
   } catch(e) {
     const err = document.getElementById('auth-error');
@@ -362,12 +364,29 @@ async function connect() {
   }
 }
 
+// Auto-connect if saved credentials
+window.addEventListener('load', () => {
+  const savedKey = localStorage.getItem('arc_api_key');
+  const savedDep = localStorage.getItem('arc_dep_id');
+  if (savedKey && savedDep) {
+    document.getElementById('auth-key').value = savedKey;
+    document.getElementById('auth-dep').value = savedDep;
+    connect();
+  }
+  // Pre-fill from URL params
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('dep')) document.getElementById('auth-dep').value = params.get('dep');
+  if (params.get('key')) document.getElementById('auth-key').value = params.get('key');
+});
+
 ['auth-key','auth-dep'].forEach(id => {
   document.getElementById(id).addEventListener('keydown', e => { if(e.key==='Enter') connect(); });
 });
 
 function signout() {
   API_KEY=''; DEP_ID=''; _traces=[]; _sessions=[]; _dep=null;
+  localStorage.removeItem('arc_api_key');
+  localStorage.removeItem('arc_dep_id');
   document.getElementById('app').style.display='none';
   document.getElementById('auth-screen').style.display='flex';
   document.getElementById('auth-key').value='';
