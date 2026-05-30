@@ -1117,7 +1117,6 @@ def check_api_key(key: str) -> bool:
     if keys and key in keys: return True
     if not keys: return True  # no keys configured = open
     # Check users table for demo and paid keys
-    print(f"[AUTH] key={key[:10]}... USE_PG={_USE_PG} env_keys={bool(keys)}")
     try:
         if _USE_PG:
             conn = _pg_connect()
