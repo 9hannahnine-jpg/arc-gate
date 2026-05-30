@@ -1111,13 +1111,27 @@ def _phrase_blocked_UNUSED(prompt: str):
 _api_key_header = _APIKeyHeader(name="X-Arc-Gate-Key", auto_error=False)
 
 def check_api_key(key: str) -> bool:
+    if not key: return False
+    # Check env var keys
     keys = set(k.strip() for k in os.environ.get("GATE_API_KEYS", "").split(",") if k.strip())
-    if not keys: return True
-    return key in keys
+    if keys and key in keys: return True
+    if not keys: return True  # no keys configured = open
+    # Check users table for demo and paid keys
+    try:
+        if _USE_PG:
+            conn = _pg_connect()
+            cur = conn.cursor()
+            cur.execute("SELECT api_key FROM users WHERE api_key=%s", (key,))
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+            if row: return True
+    except Exception as e:
+        print(f"[AUTH] key check error: {e}")
+    return False
 
 async def auth(api_key: str = Depends(_api_key_header)):
-    keys = set(k.strip() for k in os.environ.get("GATE_API_KEYS", "").split(",") if k.strip())
-    if keys and (not api_key or api_key not in keys):
+    if not check_api_key(api_key):
         raise HTTPException(status_code=401, detail="Invalid or missing X-Arc-Gate-Key")
 
 _embed_model = None
