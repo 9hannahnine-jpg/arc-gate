@@ -2812,7 +2812,8 @@ async def signup_submit(request: Request):
 @app.get("/sentry/health")
 async def health():
     return {"status": "ok", "version": "1.0", "upstream": UPSTREAM_URL,
-            "db": DB_PATH, "deployments": len(store.list_all())}
+            "db": DB_PATH, "deployments": len(store.list_all()),
+            "fail_mode": _FAIL_MODE}
 
 @app.get("/sentry/deployments")
 async def list_deployments(auth=Depends(auth)):
