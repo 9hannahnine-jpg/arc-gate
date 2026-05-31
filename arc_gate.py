@@ -2830,12 +2830,27 @@ async def deployment_detail(deployment_id: str, model_version: str = None, auth=
     s = store.get(deployment_id, model_version)
     if s is None: s = load_state(deployment_id, model_version)
     cost = get_cost_summary(deployment_id, model_version)
+    # Look up user info for Console upgrade flow
+    _user_email = None
+    _key_type = "demo"
+    try:
+        if _USE_PG:
+            _uc = _pg_connect()
+            _ucur = _uc.cursor()
+            _ucur.execute("SELECT email, key_type FROM users WHERE deployment_id=%s", (deployment_id,))
+            _urow = _ucur.fetchone()
+            _ucur.close(); _uc.close()
+            if _urow:
+                _user_email, _key_type = _urow[0], _urow[1]
+    except Exception as _ue:
+        print(f"[AUTH] user lookup error: {_ue}")
     if s is None:
         trace_summary = get_trace_deployment_summary(deployment_id)
         return {"deployment_id": deployment_id, "model_version": model_version,
                 "status": trace_summary["status"], "step": 0, "requests": trace_summary["requests"],
                 "alerts": 0, "warmup_complete": False,
-                "drift_type": None, "confidence": 0.0, "cost_summary": cost}
+                "drift_type": None, "confidence": 0.0, "cost_summary": cost,
+                "email": _user_email, "key_type": _key_type}
     return {"deployment_id": deployment_id, "model_version": model_version,
             "status": s.last_status, "step": s.step, "requests": s.request_count,
             "alerts": s.alert_count, "warmup_complete": s.step >= s.warmup,
