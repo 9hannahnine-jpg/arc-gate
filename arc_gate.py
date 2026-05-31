@@ -3803,7 +3803,17 @@ async def proxy(request: Request, path: str,
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
             up = await client.request(method=request.method, url=UPSTREAM_URL.rstrip("/") + "/" + path,
                                       headers=hdrs, content=fwd, params=dict(request.query_params))
-    except Exception as e: return JSONResponse(status_code=502, content={"error": str(e)})
+    except Exception as e:
+        print(f"[FAILMODE] Upstream error ({_FAIL_MODE}): {e}")
+        if _FAIL_MODE == "fail_closed":
+            return JSONResponse(status_code=503, content={"error": "governance_unavailable", "message": "Arc Gate governance unavailable", "x_arc_fail_mode": "fail_closed"})
+        elif _FAIL_MODE == "fail_open":
+            print(f"[FAILMODE] WARN: fail_open — upstream unreachable, cannot bypass")
+            return JSONResponse(status_code=502, content={"error": str(e), "x_arc_fail_mode": "fail_open"})
+        elif _FAIL_MODE == "fail_restricted":
+            return JSONResponse(status_code=502, content={"error": str(e), "x_arc_fail_mode": "fail_restricted", "message": "Upstream unavailable. Arc Gate governance was active."})
+        else:
+            return JSONResponse(status_code=502, content={"error": str(e)})
     rb = {}
     if is_inf:
         try: rb = up.json()
