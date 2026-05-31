@@ -1,6 +1,8 @@
 # Arc Gate
 
-**Prompt injection protection for any OpenAI-compatible LLM. One line of config.**
+**The runtime governance proxy for AI agents — part of the [Bendex Arc platform](https://bendexgeometry.com).**
+
+Catches multi-turn attacks that unfold across a conversation, not just single messages.
 
 ## Try it in 30 seconds
 
