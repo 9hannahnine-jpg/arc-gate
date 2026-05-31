@@ -3224,6 +3224,35 @@ async def test_restricted():
 
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"])
+
+# ── Fail-mode configuration ────────────────────────────────────────────────────
+# Controls Arc Gate behavior when the governance pipeline errors unexpectedly.
+# fail_restricted (default): strip tool_calls, pass through safely
+# fail_open: pass through unchanged, log loudly
+# fail_closed: return 503
+# fail_local: phrase blocking only, skip ML layers
+_FAIL_MODE = os.environ.get("ARC_FAIL_MODE", "fail_restricted").lower().strip()
+print(f"[FAILMODE] Arc Gate fail mode: {_FAIL_MODE}")
+
+def _fail_mode_response(request_body: dict, fail_mode: str, error: str):
+    """Return appropriate response based on fail mode."""
+    import copy
+    print(f"[FAILMODE] Governance error ({fail_mode}): {error}")
+    if fail_mode == "fail_closed":
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"error": "governance_unavailable", "message": "Arc Gate governance unavailable"}, status_code=503)
+    elif fail_mode == "fail_open":
+        print(f"[FAILMODE] WARN: Bypassing governance — passing request through unchanged")
+        return None  # caller will forward unchanged
+    elif fail_mode == "fail_restricted":
+        # Strip tool_calls from body
+        safe_body = copy.deepcopy(request_body)
+        if "tools" in safe_body: del safe_body["tools"]
+        if "tool_choice" in safe_body: del safe_body["tool_choice"]
+        return safe_body  # caller will forward stripped body
+    else:  # fail_local — handled by caller
+        return None
+
 async def proxy(request: Request, path: str,
                 x_sentry_deployment: Optional[str] = Header(default=None),
                 x_sentry_model_version: Optional[str] = Header(default=None)):
@@ -3257,7 +3286,8 @@ async def proxy(request: Request, path: str,
 
     # First detection layer: session authority boundary checks run before
     # auth failures, stream handling, phrase filters, geometric monitors, or upstream calls.
-    if is_inf and is_json:
+    try:
+      if is_inf and is_json:
         try:
             _authority_text, _authority_source = _extract_authority_text_and_source(body_dict)
             _explicit_authority_session_id = (
