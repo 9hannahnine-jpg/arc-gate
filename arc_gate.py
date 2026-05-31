@@ -3286,8 +3286,7 @@ async def proxy(request: Request, path: str,
 
     # First detection layer: session authority boundary checks run before
     # auth failures, stream handling, phrase filters, geometric monitors, or upstream calls.
-    try:
-      if is_inf and is_json:
+    if is_inf and is_json:
         try:
             _authority_text, _authority_source = _extract_authority_text_and_source(body_dict)
             _explicit_authority_session_id = (
