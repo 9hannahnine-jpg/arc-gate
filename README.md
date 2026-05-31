@@ -4,6 +4,12 @@
 
 Catches multi-turn attacks that unfold across a conversation, not just single messages.
 
+## Documentation
+
+- [Self-Hosting Guide](SELF_HOSTING.md) — run Arc Gate on your own infrastructure
+- [Benchmark Harness](https://github.com/9hannahnine-jpg/arc-gate-benchmark) — reproduce the results
+- [Arc Gate MCP](https://github.com/9hannahnine-jpg/arc-gate-mcp) — MCP governance proxy
+
 ## Try it in 30 seconds
 
 ```python
