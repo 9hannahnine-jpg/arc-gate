@@ -2653,6 +2653,145 @@ document.getElementById('email').addEventListener('keydown', e => { if(e.key ===
 </body>
 </html>""")
 
+
+@app.post("/stripe/webhook")
+async def stripe_webhook(request: Request):
+    import hmac, hashlib, time, secrets
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature", "")
+    webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+
+    # Verify Stripe signature
+    if webhook_secret:
+        try:
+            parts = {k: v for k, v in (p.split("=", 1) for p in sig_header.split(","))}
+            timestamp = parts.get("t", "0")
+            sig = parts.get("v1", "")
+            signed_payload = f"{timestamp}.{payload.decode()}"
+            expected = hmac.new(
+                webhook_secret.encode(),
+                signed_payload.encode(),
+                hashlib.sha256
+            ).hexdigest()
+            if not hmac.compare_digest(expected, sig):
+                raise HTTPException(status_code=400, detail="Invalid signature")
+            if abs(time.time() - int(timestamp)) > 300:
+                raise HTTPException(status_code=400, detail="Timestamp too old")
+        except Exception as e:
+            print(f"[STRIPE] Signature error: {e}")
+            raise HTTPException(status_code=400, detail="Webhook error")
+
+    event = json.loads(payload)
+    print(f"[STRIPE] Event: {event.get('type')}")
+
+    if event.get("type") == "checkout.session.completed":
+        session = event["data"]["object"]
+        email = session.get("customer_details", {}).get("email") or session.get("customer_email")
+        if not email:
+            print("[STRIPE] No email in session")
+            return {"ok": True}
+
+        email = email.strip().lower()
+        print(f"[STRIPE] Payment from {email}")
+
+        try:
+            if _USE_PG:
+                import secrets as _secrets
+                new_key = f"ag-{_secrets.token_hex(16)}"
+                conn = _pg_connect()
+                cur = conn.cursor()
+                # Check if user exists
+                cur.execute("SELECT api_key, key_type FROM users WHERE email=%s", (email,))
+                row = cur.fetchone()
+                if row:
+                    old_key, key_type = row
+                    if key_type == "paid":
+                        print(f"[STRIPE] {email} already paid")
+                        cur.close(); conn.close()
+                        return {"ok": True}
+                    # Upgrade demo key to paid
+                    cur.execute(
+                        "UPDATE users SET api_key=%s, key_type='paid' WHERE email=%s",
+                        (new_key, email)
+                    )
+                    print(f"[STRIPE] Upgraded {email} to paid key")
+                else:
+                    # New user — create paid account
+                    import secrets as _s
+                    dep_id = f"dep-{_s.token_hex(4)}"
+                    cur.execute(
+                        "INSERT INTO users (email, deployment_id, api_key, key_type) VALUES (%s, %s, %s, 'paid')",
+                        (email, dep_id, new_key)
+                    )
+                    print(f"[STRIPE] Created paid account for {email}")
+                conn.commit()
+                cur.close()
+                conn.close()
+
+                # Send confirmation email
+                _send_paid_email(email, new_key)
+        except Exception as e:
+            print(f"[STRIPE] DB error: {e}")
+
+    return {"ok": True}
+
+
+def _send_paid_email(email: str, api_key: str):
+    import json as _json
+    sg_key = os.environ.get("SENDGRID_API_KEY", "")
+    from_email = os.environ.get("SENDGRID_FROM_EMAIL", "noreply@bendexgeometry.com")
+    if not sg_key:
+        return
+    payload = {
+        "personalizations": [{"to": [{"email": email}]}],
+        "from": {"email": from_email, "name": "Bendex Arc"},
+        "subject": "Your Bendex Arc subscription is active",
+        "content": [{
+            "type": "text/html",
+            "value": f"""<!DOCTYPE html>
+<html>
+<body style="background:#0a0e14;color:#e2e8f0;font-family:'IBM Plex Mono',monospace;padding:40px;max-width:560px;margin:0 auto;">
+<div style="margin-bottom:32px;">
+  <span style="font-size:13px;font-weight:600;letter-spacing:0.12em;">BENDEX</span><span style="color:#3b82f6;">.</span><span style="color:#8899aa;font-size:13px;">ARC</span>
+</div>
+<h1 style="font-size:22px;font-weight:600;margin-bottom:8px;">You're on Bendex Arc.</h1>
+<p style="color:#8899aa;margin-bottom:32px;font-size:14px;line-height:1.7;">Your subscription is active. Here's your production API key.</p>
+
+<div style="background:#111620;border:1px solid #243040;padding:20px;margin-bottom:32px;">
+  <div style="font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:#3d5068;margin-bottom:8px;">Production API Key</div>
+  <div style="font-size:14px;color:#60a5fa;">{api_key}</div>
+</div>
+
+<div style="background:#111620;border:1px solid #243040;padding:20px;margin-bottom:32px;">
+  <div style="font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:#3d5068;margin-bottom:12px;">Quick Start</div>
+  <div style="font-size:12px;color:#8899aa;line-height:2;">
+    from openai import OpenAI<br><br>
+    client = OpenAI(<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;api_key="{api_key}",<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;base_url="https://web-production-6e47f.up.railway.app/v1"<br>
+    )
+  </div>
+</div>
+
+<a href="https://app.bendexgeometry.com/console" style="display:inline-block;background:#3b82f6;color:#fff;font-size:11px;font-weight:600;padding:10px 20px;text-decoration:none;letter-spacing:0.06em;margin-bottom:32px;">Open Console →</a>
+
+<p style="font-size:12px;color:#3d5068;line-height:1.7;">Questions? Reply to this email or visit bendexgeometry.com<br>Bendex Geometry LLC</p>
+</body>
+</html>"""
+        }]
+    }
+    try:
+        req = urllib.request.Request(
+            "https://api.sendgrid.com/v3/mail/send",
+            data=_json.dumps(payload).encode(),
+            headers={"Authorization": f"Bearer {sg_key}", "Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req) as r:
+            print(f"[STRIPE] Confirmation email sent to {email}")
+    except Exception as e:
+        print(f"[STRIPE] Email error: {e}")
+
 @app.post("/signup")
 async def signup_submit(request: Request):
     from fastapi.responses import JSONResponse
