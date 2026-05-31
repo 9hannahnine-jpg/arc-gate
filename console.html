@@ -21,6 +21,14 @@ body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-ser
 *{scrollbar-width:thin;scrollbar-color:var(--border2) transparent;}
 input,select,button{font-family:inherit;}
 
+/* ── Upgrade banner ── */
+.upgrade-banner{display:none;background:linear-gradient(90deg,rgba(59,130,246,0.12),rgba(139,92,246,0.12));border-bottom:1px solid rgba(59,130,246,0.3);padding:10px 24px;align-items:center;justify-content:space-between;gap:16px;flex-shrink:0;}
+.upgrade-banner.show{display:flex;}
+.upgrade-banner-text{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text2);}
+.upgrade-banner-text span{color:var(--accent2);}
+.upgrade-btn{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;color:#fff;background:var(--accent);border:none;padding:6px 16px;cursor:pointer;white-space:nowrap;text-decoration:none;letter-spacing:0.06em;}
+.upgrade-btn:hover{background:var(--accent2);}
+
 /* ── Auth ── */
 #auth-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:radial-gradient(ellipse at 50% 0%,rgba(59,130,246,0.08) 0%,transparent 60%),var(--bg);}
 .auth-card{width:420px;padding:48px;background:var(--bg2);border:1px solid var(--border2);border-radius:2px;position:relative;}
@@ -250,6 +258,12 @@ input,select,button{font-family:inherit;}
       <svg class="tab-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M2 8l5-5v3h7v4H7v3z"/></svg>
       Quick Start
     </button>
+  </div>
+
+  <!-- Upgrade banner -->
+  <div class="upgrade-banner" id="upgrade-banner">
+    <div class="upgrade-banner-text">You're on the <span>free tier</span> — 500 requests included. Upgrade to unlock unlimited requests and all platform features.</div>
+    <a id="upgrade-btn" href="https://buy.stripe.com/dRm5kF86u6qD7Bdg8R24003" target="_blank" class="upgrade-btn">Upgrade to Bendex Arc — $29/mo →</a>
   </div>
 
   <!-- Content -->
@@ -543,6 +557,7 @@ async function loadAll() {
     ]);
     renderAll();
     renderQuickStart();
+    showUpgradeBanner();
   } catch(e) { console.error(e); }
 }
 
@@ -576,6 +591,21 @@ function renderQuickStart() {
   if (qsDep) qsDep.textContent = DEP_ID;
   if (qsPython) qsPython.innerHTML = `<span style="color:var(--text3)">from</span> openai <span style="color:var(--text3)">import</span> OpenAI<br><br>client = OpenAI(<br>&nbsp;&nbsp;&nbsp;&nbsp;api_key=<span style="color:var(--accent2)">"${API_KEY}"</span>,<br>&nbsp;&nbsp;&nbsp;&nbsp;base_url=<span style="color:var(--accent2)">"https://web-production-6e47f.up.railway.app/v1"</span><br>)<br><br>response = client.chat.completions.create(<br>&nbsp;&nbsp;&nbsp;&nbsp;model=<span style="color:var(--accent2)">"gpt-4o-mini"</span>,<br>&nbsp;&nbsp;&nbsp;&nbsp;messages=[{"role": "user", "content": "Hello"}],<br>&nbsp;&nbsp;&nbsp;&nbsp;extra_headers={"X-Sentry-Deployment": <span style="color:var(--accent2)">"${DEP_ID}"</span>}<br>)`;
   if (qsLangchain) qsLangchain.innerHTML = `<span style="color:var(--text3)">from</span> langchain_arcgate <span style="color:var(--text3)">import</span> ArcGateCallback<br><span style="color:var(--text3)">from</span> langchain_openai <span style="color:var(--text3)">import</span> ChatOpenAI<br><br>llm = ChatOpenAI(<br>&nbsp;&nbsp;&nbsp;&nbsp;callbacks=[ArcGateCallback(<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;api_key=<span style="color:var(--accent2)">"${API_KEY}"</span>,<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;deployment_id=<span style="color:var(--accent2)">"${DEP_ID}"</span><br>&nbsp;&nbsp;&nbsp;&nbsp;)]<br>)`;
+}
+
+function showUpgradeBanner() {
+  const banner = document.getElementById('upgrade-banner');
+  const btn = document.getElementById('upgrade-btn');
+  if (!banner || !btn) return;
+  if (_dep && _dep.key_type === 'demo') {
+    banner.classList.add('show');
+    // Pre-fill email in Stripe link
+    if (_dep.email) {
+      btn.href = `https://buy.stripe.com/dRm5kF86u6qD7Bdg8R24003?prefilled_email=${encodeURIComponent(_dep.email)}`;
+    }
+  } else {
+    banner.classList.remove('show');
+  }
 }
 
 function renderAll() {
