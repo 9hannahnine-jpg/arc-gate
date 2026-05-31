@@ -337,7 +337,10 @@ input,select,button{font-family:inherit;}
     <div class="tab-panel" id="panel-traces">
       <div class="sec-header">
         <div class="sec-title">All traces</div>
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text3)">Click any row to inspect</div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text3)">Click any row to inspect</div>
+          <button onclick="exportCSV()" style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--accent);background:none;border:1px solid var(--border2);padding:5px 12px;cursor:pointer;">↓ Export CSV</button>
+        </div>
       </div>
       <table class="data-table" style="table-layout:fixed;">
         <colgroup>
@@ -573,6 +576,24 @@ async function loadAll() {
 }
 
 async function refresh() { await loadAll(); }
+
+function exportCSV() {
+  fetch(BASE + '/sentry/deployments/' + DEP_ID + '/export?format=csv', {
+    headers: {'X-Arc-Gate-Key': API_KEY}
+  })
+  .then(r => r.blob())
+  .then(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'arc-gate-traces-' + DEP_ID + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  })
+  .catch(e => alert('Export failed: ' + e.message));
+}
 
 async function runTestRequest() {
   const btns = [document.getElementById('test-btn')].filter(Boolean);
