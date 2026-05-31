@@ -257,11 +257,11 @@ input,select,button{font-family:inherit;}
       <svg class="tab-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M1 3h14v1.5H1zm0 4h14v1.5H1zm0 4h8v1.5H1z"/></svg>
       Traces
     </button>
-    <button class="tab" onclick="switchTab('sessions',this)">
+    <button class="tab" data-tab="sessions" onclick="switchTab('sessions',this)">
       <svg class="tab-icon" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4v4l3 2" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
       Sessions
     </button>
-    <button class="tab" onclick="switchTab('memory',this)">
+    <button class="tab" data-tab="memory" onclick="switchTab('memory',this)">
       <svg class="tab-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a5 5 0 100 10A5 5 0 008 1zm0 8a3 3 0 110-6 3 3 0 010 6z"/><path d="M8 11v4M5 13h6"/></svg>
       Memory Integrity
     </button>
@@ -766,6 +766,24 @@ function closeDetail() { document.getElementById('detail').classList.remove('ope
 document.addEventListener('keydown', e => { if(e.key==='Escape') closeDetail(); });
 
 function switchTab(name, btn) {
+  const PAID_TABS = ['sessions', 'memory'];
+  const isPaid = _dep && _dep.key_type === 'paid';
+  if (PAID_TABS.includes(name) && !isPaid) {
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    const panel = document.getElementById('panel-'+name);
+    const upgradeHref = document.getElementById('upgrade-btn') ? document.getElementById('upgrade-btn').href : 'https://buy.stripe.com/dRm5kF86u6qD7Bdg8R24003';
+    panel.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;min-height:300px;">
+      <div style="background:var(--bg2);border:1px solid var(--border2);padding:48px;text-align:center;max-width:480px;">
+        <div style="font-size:32px;margin-bottom:16px;">🔒</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:600;color:var(--text);margin-bottom:10px;">Upgrade to unlock this feature</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:28px;line-height:1.7;">Session tracking and memory integrity monitoring are available on the Bendex Arc paid plan.</div>
+        <a href="${upgradeHref}" target="_blank" style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;color:#fff;background:var(--accent);padding:10px 24px;text-decoration:none;display:inline-block;">Upgrade to Bendex Arc — $29/mo →</a>
+      </div></div>`;
+    panel.classList.add('active');
+    return;
+  }
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   btn.classList.add('active');
