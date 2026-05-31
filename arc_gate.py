@@ -2809,6 +2809,68 @@ async def signup_submit(request: Request):
         print(f"[SIGNUP] error: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
+
+@app.get("/sentry/deployments/{deployment_id}/export")
+async def export_traces(
+    deployment_id: str,
+    format: str = "csv",
+    start: float = None,
+    end: float = None,
+    limit: int = 10000,
+    api_key: str = Depends(_api_key_header)
+):
+    if not check_api_key(api_key):
+        raise HTTPException(status_code=401, detail="Invalid or missing X-Arc-Gate-Key")
+    try:
+        if _USE_PG:
+            conn = _pg_connect()
+            cur = conn.cursor()
+            query = """
+                SELECT request_id, timestamp, drift_status, prompt, response,
+                       input_tokens, output_tokens, latency_ms, cost_usd, fr_z
+                FROM traces
+                WHERE deployment_id = %s
+            """
+            params = [deployment_id]
+            if start:
+                query += " AND timestamp >= %s"
+                params.append(start)
+            if end:
+                query += " AND timestamp <= %s"
+                params.append(end)
+            query += " ORDER BY timestamp DESC LIMIT %s"
+            params.append(limit)
+            cur.execute(query, params)
+            rows = cur.fetchall()
+            cols = ["request_id", "timestamp", "decision", "prompt", "response",
+                    "input_tokens", "output_tokens", "latency_ms", "cost_usd", "fr_z"]
+            cur.close()
+            conn.close()
+        else:
+            rows = []
+            cols = []
+
+        if format.lower() == "csv":
+            import csv, io
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(cols)
+            for row in rows:
+                writer.writerow(row)
+            from fastapi.responses import StreamingResponse
+            return StreamingResponse(
+                iter([output.getvalue()]),
+                media_type="text/csv",
+                headers={"Content-Disposition": f"attachment; filename=arc-gate-traces-{deployment_id}.csv"}
+            )
+        else:
+            records = [dict(zip(cols, row)) for row in rows]
+            return {"deployment_id": deployment_id, "count": len(records), "traces": records}
+
+    except Exception as e:
+        print(f"[EXPORT] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/sentry/health")
 async def health():
     return {"status": "ok", "version": "1.0", "upstream": UPSTREAM_URL,
