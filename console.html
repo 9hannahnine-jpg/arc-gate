@@ -569,50 +569,10 @@ async function loadAll() {
     renderAll();
     renderQuickStart();
     showUpgradeBanner();
-    applyFeatureGating();
   } catch(e) { console.error(e); }
 }
 
 async function refresh() { await loadAll(); }
-
-function applyFeatureGating() {
-  const isPaid = _dep && _dep.key_type === 'paid';
-  const sessionsTab = document.querySelector('[onclick="switchTab('sessions',this)"]');
-  const memoryTab = document.querySelector('[onclick="switchTab('memory',this)"]');
-
-  if (!isPaid) {
-    // Lock sessions tab
-    if (sessionsTab) {
-      sessionsTab.classList.add('tab-locked');
-      sessionsTab.innerHTML = sessionsTab.innerHTML.replace('Sessions', 'Sessions <span class="lock-icon">🔒</span>');
-      sessionsTab.onclick = (e) => { e.preventDefault(); showLockedPanel('sessions'); };
-    }
-    // Lock memory tab
-    if (memoryTab) {
-      memoryTab.classList.add('tab-locked');
-      memoryTab.innerHTML = memoryTab.innerHTML.replace('Memory Integrity', 'Memory Integrity <span class="lock-icon">🔒</span>');
-      memoryTab.onclick = (e) => { e.preventDefault(); showLockedPanel('memory'); };
-    }
-  } else {
-    if (sessionsTab) { sessionsTab.classList.remove('tab-locked'); }
-    if (memoryTab) { memoryTab.classList.remove('tab-locked'); }
-  }
-}
-
-function showLockedPanel(name) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  const panel = document.getElementById('panel-' + name);
-  if (panel) {
-    panel.classList.add('active');
-    panel.innerHTML = `<div class="locked-panel"><div class="locked-card">
-      <div style="font-size:32px;margin-bottom:16px;">🔒</div>
-      <div class="locked-card-title">Upgrade to access this feature</div>
-      <div class="locked-card-desc">Session tracking and memory integrity monitoring are available on the Bendex Arc paid plan. Upgrade to unlock unlimited requests and all platform features.</div>
-      <a href="${document.getElementById('upgrade-btn') ? document.getElementById('upgrade-btn').href : 'https://buy.stripe.com/dRm5kF86u6qD7Bdg8R24003'}" target="_blank" class="locked-upgrade-btn">Upgrade to Bendex Arc — $29/mo →</a>
-    </div></div>`;
-  }
-}
 
 async function runTestRequest() {
   const btns = [document.getElementById('test-btn')].filter(Boolean);
