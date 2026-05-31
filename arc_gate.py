@@ -3224,14 +3224,7 @@ async def test_restricted():
     }
 
 
-@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"])
-
 # ── Fail-mode configuration ────────────────────────────────────────────────────
-# Controls Arc Gate behavior when the governance pipeline errors unexpectedly.
-# fail_restricted (default): strip tool_calls, pass through safely
-# fail_open: pass through unchanged, log loudly
-# fail_closed: return 503
-# fail_local: phrase blocking only, skip ML layers
 _FAIL_MODE = os.environ.get("ARC_FAIL_MODE", "fail_restricted").lower().strip()
 print(f"[FAILMODE] Arc Gate fail mode: {_FAIL_MODE}")
 
@@ -3244,16 +3237,16 @@ def _fail_mode_response(request_body: dict, fail_mode: str, error: str):
         return JSONResponse({"error": "governance_unavailable", "message": "Arc Gate governance unavailable"}, status_code=503)
     elif fail_mode == "fail_open":
         print(f"[FAILMODE] WARN: Bypassing governance — passing request through unchanged")
-        return None  # caller will forward unchanged
+        return None
     elif fail_mode == "fail_restricted":
-        # Strip tool_calls from body
         safe_body = copy.deepcopy(request_body)
         if "tools" in safe_body: del safe_body["tools"]
         if "tool_choice" in safe_body: del safe_body["tool_choice"]
-        return safe_body  # caller will forward stripped body
-    else:  # fail_local — handled by caller
+        return safe_body
+    else:
         return None
 
+@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"])
 async def proxy(request: Request, path: str,
                 x_sentry_deployment: Optional[str] = Header(default=None),
                 x_sentry_model_version: Optional[str] = Header(default=None)):
