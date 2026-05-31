@@ -2865,7 +2865,8 @@ async def deployment_detail(deployment_id: str, model_version: str = None, auth=
             "drift_history": get_drift_history(deployment_id, model_version),
             "cost_summary": cost, "hallucination_score": getattr(s, "hallucination_score", 0.0),
             "warmup_entropy": getattr(s, "warmup_entropy", 0.0),
-            "created_at": s.created_at, "last_seen": s.last_seen}
+            "created_at": s.created_at, "last_seen": s.last_seen,
+            "email": _user_email, "key_type": _key_type}
 
 @app.get("/sentry/deployments/{deployment_id}/traces")
 async def deployment_traces(deployment_id: str, model_version: str = None, limit: int = 50, auth=Depends(auth)):
