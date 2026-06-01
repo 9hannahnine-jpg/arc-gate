@@ -1136,6 +1136,23 @@ def check_api_key(key: str) -> bool:
     return False
 
 async def auth(api_key: str = Depends(_api_key_header)):
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Invalid or missing X-Arc-Gate-Key")
+    # Check if demo key is rate limited specifically
+    if api_key.startswith("demo-") and _USE_PG:
+        try:
+            conn = _pg_connect()
+            cur = conn.cursor()
+            cur.execute("SELECT key_type, request_count FROM users WHERE api_key=%s", (api_key,))
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+            if row and row[0] == 'demo' and (row[1] or 0) >= _DEMO_LIMIT:
+                raise HTTPException(status_code=429, detail="Demo limit reached. Upgrade to Bendex Arc at bendexgeometry.com")
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"[AUTH] demo limit check error: {e}")
     if not check_api_key(api_key):
         raise HTTPException(status_code=401, detail="Invalid or missing X-Arc-Gate-Key")
 
