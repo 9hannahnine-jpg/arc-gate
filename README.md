@@ -4,6 +4,14 @@
 
 Catches multi-turn attacks that unfold across a conversation, not just single messages.
 
+## Integrations
+
+| Framework | Package | Install |
+|-----------|---------|---------|
+| LangChain | [langchain-arcgate](https://pypi.org/project/langchain-arcgate/) | `pip install langchain-arcgate` |
+| CrewAI | [crewai-arcgate](https://pypi.org/project/crewai-arcgate/) | `pip install crewai-arcgate` |
+| MCP | [arc-gate-mcp](https://pypi.org/project/arc-gate-mcp/) | `pip install arc-gate-mcp` |
+
 ## Documentation
 
 - [Self-Hosting Guide](SELF_HOSTING.md) — run Arc Gate on your own infrastructure
