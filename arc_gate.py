@@ -1121,11 +1121,16 @@ def check_api_key(key: str) -> bool:
         if _USE_PG:
             conn = _pg_connect()
             cur = conn.cursor()
-            cur.execute("SELECT api_key FROM users WHERE api_key=%s", (key,))
+            cur.execute("SELECT api_key, key_type, request_count FROM users WHERE api_key=%s", (key,))
             row = cur.fetchone()
             cur.close()
             conn.close()
-            if row: return True
+            if row:
+                key_type = row[1]
+                request_count = row[2] or 0
+                if key_type == 'demo' and request_count >= _DEMO_LIMIT:
+                    return False  # rate limited
+                return True
     except Exception as e:
         print(f"[AUTH] key check error: {e}")
     return False
@@ -3499,9 +3504,21 @@ async def proxy(request: Request, path: str,
     _real_key = os.environ.get("OPENAI_API_KEY","")
     if _incoming_token in _DEMO_KEYS:
         _demo_allowed, _demo_count = check_demo_usage(_incoming_token)
+        # Also increment request_count for personal demo keys in users table
+        if _incoming_token.startswith("demo-"):
+            try:
+                if _USE_PG:
+                    _uc = _pg_connect()
+                    _ucur = _uc.cursor()
+                    _ucur.execute("UPDATE users SET request_count = COALESCE(request_count, 0) + 1 WHERE api_key=%s AND key_type='demo'", (_incoming_token,))
+                    _uc.commit()
+                    _ucur.close()
+                    _uc.close()
+            except Exception as _ue:
+                print(f"[USAGE] increment error: {_ue}")
         if not _demo_allowed:
             return JSONResponse(status_code=429, content={
-                "error": "Demo limit reached. Get a production key at bendexgeometry.com/gate",
+                "error": "Demo limit reached. Upgrade to Bendex Arc for unlimited requests at bendexgeometry.com",
                 "upgrade_url": _DEMO_UPGRADE_URL
             })
         if _real_key: hdrs["authorization"] = f"Bearer {_real_key}"
