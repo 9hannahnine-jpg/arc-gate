@@ -16,7 +16,7 @@ Catches multi-turn attacks that unfold across a conversation, not just single me
 from openai import OpenAI
 
 client = OpenAI(
-    api_key="demo",
+    api_key="your-demo-key",  # get free key at web-production-6e47f.up.railway.app/signup
     base_url="https://web-production-6e47f.up.railway.app/v1"
 )
 
