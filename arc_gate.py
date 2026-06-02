@@ -3653,9 +3653,10 @@ async def proxy(request: Request, path: str,
         # Multilingual injection check for untrusted sources
         _source_type = request.headers.get("x-arc-source-type", "").lower()
         _untrusted_sources = {"tool_output", "webpage", "email", "document", "rag_result", "external"}
-        if _source_type in _untrusted_sources and _upstream_key:
+        _ml_api_key = os.environ.get("OPENAI_API_KEY", "")
+        if _source_type in _untrusted_sources and _ml_api_key:
             try:
-                _ml_result = await multilingual_injection_check(prompt_text, _upstream_key)
+                _ml_result = await multilingual_injection_check(prompt_text, _ml_api_key)
                 if _ml_result.get("is_injection"):
                     print(f"[MULTILINGUAL] Injection detected in non-English content")
                     rt = time.time()
