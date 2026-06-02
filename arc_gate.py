@@ -3650,6 +3650,28 @@ async def proxy(request: Request, path: str,
                 _mahal_score = _mahal_filter.score(prompt_text)
             except Exception as _me:
                 print(f"[MF] score error: {_me}")
+        # Multilingual injection check for untrusted sources
+        _source_type = request.headers.get("x-arc-source-type", "").lower()
+        _untrusted_sources = {"tool_output", "webpage", "email", "document", "rag_result", "external"}
+        if _source_type in _untrusted_sources and _upstream_key:
+            try:
+                _ml_result = await multilingual_injection_check(prompt_text, _upstream_key)
+                if _ml_result.get("is_injection"):
+                    print(f"[MULTILINGUAL] Injection detected in non-English content")
+                    rt = time.time()
+                    save_trace(did, version, str(uuid.uuid4())[:8], prompt_text[:500], "", 0, 0, 0, 0.0, "blocked_multilingual", 0.0, rt)
+                    return JSONResponse(status_code=200, content={
+                        "id": "blocked", "object": "chat.completion", "choices": [{
+                            "message": {"role": "assistant", "content": "[Arc Gate] Multilingual injection attempt blocked."},
+                            "finish_reason": "stop", "index": 0
+                        }],
+                        "arc_sentry": {"blocked": True, "decision": "blocked", "layer": "multilingual_check",
+                                       "reason": "multilingual_injection_detected", "severity": "high", "confidence": 0.9,
+                                       "triggered_layers": [{"layer": "multilingual_check", "signal": "injection", "score": 0.9}]}
+                    })
+            except Exception as _ml_e:
+                print(f"[MULTILINGUAL] check error: {_ml_e}")
+
         # Layer 0a: residual probe (GroupDRO, worst-domain TPR@1%FPR=0.525)
         if _PROBE_ENABLED and _residual_probe is not None:
             _probe_result = _screen_with_probe(prompt_text, request_mode=_request_policy_mode)
