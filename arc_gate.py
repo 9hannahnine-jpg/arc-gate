@@ -3544,7 +3544,7 @@ async def proxy(request: Request, path: str,
         if is_valid_customer_key(_incoming_token):
             if _real_key: hdrs["authorization"] = f"Bearer {_real_key}"
             else: return _auth_error_response(503, "Upstream key not configured")
-        else: return _auth_error_response(401, "Invalid or cancelled Arc Gate API key")
+        else: return _auth_error_response(401, "Invalid API key. Get a free personal key at web-production-6e47f.up.railway.app/signup")
 
     # ── Demo key substitution ──────────────────────────────────
     _incoming_token = auth_h.replace("Bearer ", "").replace("bearer ", "").strip()
