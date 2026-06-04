@@ -10,6 +10,12 @@ See the attack in action — same LangChain agent, with and without Arc Gate:
 
 [github.com/9hannahnine-jpg/arc-gate-demo](https://github.com/9hannahnine-jpg/arc-gate-demo)
 
+## Demo
+
+See the attack in action — same LangChain agent, with and without Arc Gate:
+
+[github.com/9hannahnine-jpg/arc-gate-demo](https://github.com/9hannahnine-jpg/arc-gate-demo)
+
 ## Integrations
 
 | Framework | Package | Install |
