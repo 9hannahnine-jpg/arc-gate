@@ -2445,6 +2445,11 @@ async def arc_replay_proxy(path: str, request: Request, x_arc_gate_key: str = He
 
 
 
+@app.get("/dashboard")
+async def dashboard_redirect():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/console", status_code=301)
+
 @app.get("/console")
 async def console_page():
     from fastapi.responses import HTMLResponse
