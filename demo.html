@@ -423,7 +423,10 @@ async function sendCustomTurn() {
 
    row.className = 'c-turn ' + (blocked ? 'c-turn-blocked' : decision === 'monitor' ? 'c-turn-monitor' : 'c-turn-pass');
    row.querySelector('.c-status').textContent = blocked ? '⛔ BLOCKED' : decision === 'monitor' ? '⚠ MONITOR' : '✓ PASS';
-   row.querySelector('.c-risk').textContent = 'risk: ' + riskPct + '%';
+   const authDecision = arc.authority_decision || decision;
+    const authRisk = Math.round((arc.authority_session_risk || 0) * 100);
+    row.querySelector('.c-risk').textContent = 'auth: ' + authDecision + ' (' + authRisk + '%)';"
+
 
    if (blocked) {
      customBlocked = true;
@@ -490,7 +493,9 @@ async function runCrescendo() {
 
       row.className = 'c-turn ' + (blocked ? 'c-turn-blocked' : decision === 'monitor' ? 'c-turn-monitor' : 'c-turn-pass');
       row.querySelector('.c-status').textContent = blocked ? '⛔ BLOCKED' : decision === 'monitor' ? '⚠ MONITOR' : '✓ PASS';
-      row.querySelector('.c-risk').textContent = `risk: ${riskPct}%`;
+      const authDecision2 = arc.authority_decision || decision;
+      const authRisk2 = Math.round((arc.authority_session_risk || 0) * 100);
+      row.querySelector('.c-risk').textContent = `auth: ${authDecision2} (${authRisk2}%)`;
 
       if (blocked && !blockedAt) {
         blockedAt = t.turn;
