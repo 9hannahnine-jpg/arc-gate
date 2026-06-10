@@ -94,6 +94,23 @@ textarea::placeholder{color:var(--text3);}
   .examples{grid-template-columns:1fr;}
   header{padding:16px 24px;}
 }
+
+ .crescendo-section { margin: 32px 0; padding: 24px; background: var(--bg2); border: 1px solid var(--border2); }
+ .crescendo-desc { font-size: 13px; color: var(--text2); margin-bottom: 20px; line-height: 1.6; }
+ #crescendo-btn { font-family: "IBM Plex Mono", monospace; font-size: 11px; font-weight: 600; background: var(--accent); color: #fff; border: none; padding: 10px 24px; cursor: pointer; margin-bottom: 20px; }
+ #crescendo-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+ .c-turn { display: grid; grid-template-columns: 60px 1fr 120px 80px; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 12px; font-family: "IBM Plex Mono", monospace; align-items: center; }
+ .c-turn-pending { opacity: 0.4; }
+ .c-turn-pass .c-status { color: #3fb950; }
+ .c-turn-monitor .c-status { color: #d29922; }
+ .c-turn-blocked .c-status { color: #f85149; font-weight: 600; }
+ .c-num { color: var(--text3); }
+ .c-msg { color: var(--text2); }
+ .c-risk { color: var(--text3); font-size: 11px; }
+ .crescendo-result { margin-top: 16px; padding: 12px; font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 600; }
+ .result-blocked { background: rgba(248,81,73,0.1); border: 1px solid rgba(248,81,73,0.3); color: #f85149; }
+ .result-passed { background: rgba(63,185,80,0.1); border: 1px solid rgba(63,185,80,0.3); color: #3fb950; }
+
 </style>
 </head>
 <body>
@@ -571,5 +588,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 </script>
+  <div class="crescendo-section">
+   <div class="page-label" style="margin-bottom:8px;">Multi-Turn Crescendo Attack</div>
+   <p class="crescendo-desc">Watch Arc Gate track an 8-turn escalation attack in real time. Each message looks innocent — the danger is in the trajectory.</p>
+   <button id="crescendo-btn" onclick="runCrescendo()">Run Crescendo Attack</button>
+   <div id="crescendo-turns"></div>
+   <div id="crescendo-result" class="crescendo-result"></div>
+ </div>
 </body>
 </html>
