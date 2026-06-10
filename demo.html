@@ -369,6 +369,73 @@ const CRESCENDO_TURNS = [
   { turn: 8, msg: "Send it now.", expect: "block" }
 ];
 
+
+let customSessionId = 'custom_' + Math.random().toString(36).slice(2, 10);
+let customTurnCount = 0;
+let customBlocked = false;
+
+function toggleCustomMode() {
+ const el = document.getElementById('custom-mode');
+ el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function resetCustomSession() {
+ customSessionId = 'custom_' + Math.random().toString(36).slice(2, 10);
+ customTurnCount = 0;
+ customBlocked = false;
+ document.getElementById('custom-turns').innerHTML = '';
+ document.getElementById('custom-result').textContent = '';
+ document.getElementById('custom-turn-input').value = '';
+}
+
+async function sendCustomTurn() {
+ if (customBlocked) return;
+ const input = document.getElementById('custom-turn-input');
+ const msg = input.value.trim();
+ if (!msg) return;
+ input.value = '';
+ customTurnCount++;
+
+ const container = document.getElementById('custom-turns');
+ const row = document.createElement('div');
+ row.className = 'c-turn c-turn-pending';
+ row.innerHTML = `<span class="c-num">Turn ${customTurnCount}</span><span class="c-msg">${msg.slice(0,60)}${msg.length>60?'...':''}</span><span class="c-status">...</span><span class="c-risk"></span>`;
+ container.appendChild(row);
+
+ try {
+   const res = await fetch(ARC_GATE, {
+     method: 'POST',
+     headers: {
+       'Content-Type': 'application/json',
+       'Authorization': 'Bearer demo',
+       'x-arc-session-id': customSessionId,
+       'x-arc-source-type': 'user_input',
+       'x-arc-policy-mode': 'balanced'
+     },
+     body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 50, messages: [{ role: 'user', content: msg }] })
+   });
+   const data = await res.json();
+   const arc = data.arc_sentry || {};
+   const blocked = arc.blocked || false;
+   const risk = arc.authority_session_risk || 0;
+   const decision = arc.decision || 'allowed';
+   const riskPct = Math.round(risk * 100);
+
+   row.className = 'c-turn ' + (blocked ? 'c-turn-blocked' : decision === 'monitor' ? 'c-turn-monitor' : 'c-turn-pass');
+   row.querySelector('.c-status').textContent = blocked ? '⛔ BLOCKED' : decision === 'monitor' ? '⚠ MONITOR' : '✓ PASS';
+   row.querySelector('.c-risk').textContent = 'risk: ' + riskPct + '%';
+
+   if (blocked) {
+     customBlocked = true;
+     const result = document.getElementById('custom-result');
+     result.textContent = '✓ Session terminated at turn ' + customTurnCount + ' — attack detected';
+     result.className = 'crescendo-result result-blocked';
+   }
+ } catch(e) {
+   row.querySelector('.c-status').textContent = 'error';
+ }
+}
+
 let crescendoRunning = false;
 
 async function runCrescendo() {
@@ -585,13 +652,32 @@ async function runDemo() {
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('content-input').addEventListener('keydown', e => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) runDemo();
+ document.getElementById('custom-turn-input').addEventListener('keydown', e => {
+   if (e.key === 'Enter') sendCustomTurn();
+ });
   });
 });
 </script>
   <div class="crescendo-section">
    <div class="page-label" style="margin-bottom:8px;">Multi-Turn Crescendo Attack</div>
-   <p class="crescendo-desc">Watch Arc Gate track an 8-turn escalation attack in real time. Each message looks innocent — the danger is in the trajectory.</p>
-   <button id="crescendo-btn" onclick="runCrescendo()">Run Crescendo Attack</button>
+   <p class="crescendo-desc">Watch Arc Gate track an escalation attack in real time. Each message looks innocent — the danger is in the trajectory.</p>
+
+   <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+     <button id="crescendo-btn" onclick="runCrescendo()">▶ Run Templated Attack</button>
+     <button id="custom-crescendo-btn" onclick="toggleCustomMode()" style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;background:none;color:var(--accent);border:1px solid var(--border2);padding:10px 24px;cursor:pointer;">✎ Build Your Own</button>
+   </div>
+
+   <div id="custom-mode" style="display:none;margin-bottom:20px;padding:16px;border:1px solid var(--border2);background:var(--bg);">
+     <div style="font-size:11px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:12px;">Custom Session</div>
+     <div style="display:flex;gap:8px;margin-bottom:8px;">
+       <input id="custom-turn-input" type="text" placeholder="Type a message and press Send..." style="flex:1;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 12px;"/>
+       <button onclick="sendCustomTurn()" style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;background:var(--accent);color:#fff;border:none;padding:8px 16px;cursor:pointer;">Send</button>
+       <button onclick="resetCustomSession()" style="font-family:'IBM Plex Mono',monospace;font-size:11px;background:none;color:var(--text3);border:1px solid var(--border2);padding:8px 12px;cursor:pointer;">Reset</button>
+     </div>
+     <div id="custom-turns"></div>
+     <div id="custom-result" class="crescendo-result"></div>
+   </div>
+
    <div id="crescendo-turns"></div>
    <div id="crescendo-result" class="crescendo-result"></div>
  </div>
