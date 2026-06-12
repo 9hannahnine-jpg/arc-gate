@@ -741,7 +741,7 @@ STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 BILLING_SMTP_USER     = os.environ.get("BILLING_SMTP_USER", "9hannahnine@gmail.com")
 BILLING_SMTP_PASS     = os.environ.get("BILLING_SMTP_PASS", "")
 BILLING_FROM_NAME     = "Hannah @ Bendex Geometry"
-_DEMO_KEYS = set()  # Shared demo keys disabled — get a free personal key at web-production-6e47f.up.railway.app/signup
+_DEMO_KEYS = {"arc-gate-demo-key"}  # Demo page only — not for proxy access
 _DEMO_LIMIT = 500
 _DEMO_UPGRADE_URL = "https://buy.stripe.com/dRm5kF86u6qD7Bdg8R24003"
 
