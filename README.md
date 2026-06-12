@@ -26,6 +26,8 @@ See the attack in action — same LangChain agent, with and without Arc Gate:
 
 ## Documentation
 
+- [OWASP LLM & Agentic Top 10 Coverage](OWASP_COVERAGE.md) — full coverage mapping against OWASP standards
+
 - [Self-Hosting Guide](SELF_HOSTING.md) — run Arc Gate on your own infrastructure
 - [Benchmark Harness](https://github.com/9hannahnine-jpg/arc-gate-benchmark) — reproduce the results
 - [Arc Gate MCP](https://github.com/9hannahnine-jpg/arc-gate-mcp) — MCP governance proxy
