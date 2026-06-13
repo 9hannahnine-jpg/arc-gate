@@ -425,7 +425,7 @@ async function sendCustomTurn() {
    row.querySelector('.c-status').textContent = blocked ? '⛔ BLOCKED' : decision === 'monitor' ? '⚠ MONITOR' : '✓ PASS';
    const authDecision = arc.authority_decision || decision;
     const authRisk = Math.round((arc.authority_session_risk || 0) * 100);
-    row.querySelector('.c-risk').textContent = 'auth: ' + authDecision + ' (' + authRisk + '%)';"
+    row.querySelector('.c-risk').textContent = 'auth: ' + authDecision + ' (' + authRisk + '%)';
 
 
    if (blocked) {
