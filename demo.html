@@ -407,7 +407,7 @@ async function sendCustomTurn() {
      method: 'POST',
      headers: {
        'Content-Type': 'application/json',
-       'Authorization': 'Bearer demo',
+       'Authorization': 'Bearer arc-gate-demo-key',
        'x-arc-session-id': customSessionId,
        'x-arc-source-type': 'user_input',
        'x-arc-policy-mode': 'balanced'
@@ -472,7 +472,7 @@ async function runCrescendo() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer demo',
+          'Authorization': 'Bearer arc-gate-demo-key',
           'x-arc-session-id': sessionId,
           'x-arc-source-type': 'user_input',
           'x-arc-policy-mode': 'balanced'
@@ -580,7 +580,7 @@ async function runDemo() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer demo',
+        'Authorization': 'Bearer arc-gate-demo-key',
         'x-arc-session-id': sessionId,
         'x-arc-source-type': source,
         'x-arc-policy-mode': policy,
