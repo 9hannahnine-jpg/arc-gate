@@ -3345,7 +3345,29 @@ async def proxy(request: Request, path: str,
         except: pass
     is_inf  = _is_inference(path)
     auth_h  = request.headers.get("authorization", "")
-    did     = x_sentry_deployment or "arc-gate-demo"
+    _incoming_token = auth_h.replace("Bearer ","").replace("bearer ","").strip()
+
+    user_deployment_id = None
+    user_key_type = None
+    if _incoming_token:
+        try:
+            if _USE_PG:
+                _uc = _pg_connect()
+                _ucur = _uc.cursor()
+                _ucur.execute(
+                    "SELECT deployment_id, key_type FROM users WHERE api_key=%s",
+                    (_incoming_token,)
+                )
+                _row = _ucur.fetchone()
+                _ucur.close()
+                _uc.close()
+                if _row:
+                    user_deployment_id = _row[0]
+                    user_key_type = _row[1]
+        except Exception as _e:
+            print(f"[AUTH] user lookup error: {_e}")
+
+    did     = x_sentry_deployment or user_deployment_id or "arc-gate-demo"
     if did in {"demo", "demo-key", "test", "emo-key", "o"}: did = "arc-gate-demo"
     version = x_sentry_model_version or (body_dict.get("model", "default") if is_json else "default")
     session_id = request.headers.get("x-arc-session-id") or request.headers.get("X-Arc-Session-ID") or None
@@ -3524,7 +3546,7 @@ async def proxy(request: Request, path: str,
     # ── Key substitution ───────────────────────────────────────
     _incoming_token = request.headers.get("authorization","").replace("Bearer ","").replace("bearer ","").strip()
     _real_key = os.environ.get("OPENAI_API_KEY","")
-    if _incoming_token in _DEMO_KEYS:
+    if _incoming_token in _DEMO_KEYS or user_key_type == "demo":
         _demo_allowed, _demo_count = check_demo_usage(_incoming_token)
         # Also increment request_count for personal demo keys in users table
         if _incoming_token.startswith("demo-"):
