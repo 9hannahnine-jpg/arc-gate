@@ -1,8 +1,10 @@
 # Arc Gate
 
-**The runtime governance proxy for AI agents — part of the [Bendex Arc platform](https://bendexgeometry.com).**
+**Prevent AI agents from taking actions based on hidden instructions.**
 
-Catches multi-turn attacks that unfold across a conversation, not just single messages.
+Arc Gate is the runtime governance proxy for AI agents. It sits between your agent and the model API, blocking instruction authority transfer from webpages, emails, documents, and tool output before actions execute.
+
+Part of the [Bendex Arc platform](https://bendexgeometry.com).
 
 ## Demo
 
