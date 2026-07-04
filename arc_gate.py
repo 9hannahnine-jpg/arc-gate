@@ -468,6 +468,42 @@ TAU_STAR = math.sqrt(3.0 / 2.0)   # ≈ 1.2247 — geometric threshold
 TAU_WARN = TAU_STAR * 1.05         # early warning band above τ*
 T_WINDOW = 6                        # minimum turns before geometric monitoring
 
+def _get_embedding(text: str) -> list:
+    """Get OpenAI embedding for a prompt. Returns None on failure."""
+    try:
+        import urllib.request as _ur, json as _j, os as _os
+        _key = _os.environ.get("OPENAI_API_KEY", "")
+        if not _key or not text:
+            return None
+        _payload = _j.dumps({"input": text[:2000], "model": "text-embedding-3-small"}).encode()
+        _req = _ur.Request(
+            "https://api.openai.com/v1/embeddings",
+            data=_payload,
+            headers={"Authorization": f"Bearer {_key}", "Content-Type": "application/json"}
+        )
+        with _ur.urlopen(_req, timeout=2) as _r:
+            return _j.load(_r)["data"][0]["embedding"]
+    except:
+        return None
+
+def _mahalanobis_drift(embeddings: list) -> float:
+    """Compute Mahalanobis distance of latest embedding from session baseline."""
+    try:
+        import numpy as np
+        if len(embeddings) < 4:
+            return 0.0
+        arr = np.array(embeddings, dtype=np.float32)
+        baseline = arr[:-1]
+        latest = arr[-1]
+        mean = baseline.mean(axis=0)
+        diff = latest - mean
+        # Use diagonal covariance (variance per dimension) for efficiency
+        var = baseline.var(axis=0) + 1e-8
+        dist = float(np.sqrt((diff ** 2 / var).mean()))
+        return min(dist, 10.0)  # cap at 10
+    except:
+        return 0.0
+
 # Authority/tool fields get 2x weight per expert guidance
 _W = [1.0, 2.0, 2.0, 1.5, 1.0, 1.0, 1.0]  # weights for z_t components
 
@@ -563,7 +599,7 @@ def _compute_tau_sec(session_state: dict) -> dict:
 def _update_session_geometry(session_key: str, z_t: list, sessions: dict) -> dict:
     """Update session geometric state with new security state vector."""
     if session_key not in sessions:
-        sessions[session_key] = {"z_history": [], "tau_history": []}
+        sessions[session_key] = {"z_history": [], "tau_history": [], "embeddings": [], "emb_mean": None, "emb_cov": None}
     sess = sessions[session_key]
     sess["z_history"].append(z_t)
     geo = _compute_tau_sec(sess)
@@ -3793,7 +3829,8 @@ async def proxy(request: Request, path: str,
                               _z_role, _z_secret, _z_intent, _z_judge)
 
             _session_key = session_id or hdrs.get("authorization","unknown")[:32]
-            _GEO_DATA    = _update_session_geometry(_session_key, _z_t, _geo_sessions)
+            _prompt_text = (body_dict.get("messages") or [{}])[-1].get("content", "")[:500] if is_json else ""
+            _GEO_DATA    = _update_session_geometry(_session_key, _z_t, _geo_sessions, prompt_text=_prompt_text)
             if len(_geo_sessions) > 1000:
                 for k in sorted(_geo_sessions.keys())[:-1000]:
                     del _geo_sessions[k]
