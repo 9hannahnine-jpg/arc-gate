@@ -523,7 +523,7 @@ def _weighted_dist(z1: list, z2: list) -> float:
     """Weighted Euclidean distance between security state vectors."""
     return math.sqrt(sum(_W[i] * (z1[i] - z2[i])**2 for i in range(len(_W))))
 
-def _compute_tau_sec(session_state: dict) -> dict:
+def _compute_tau_sec(session_state: dict, emb_drift: float = 0.0) -> dict:
     """
     Compute τ_sec(t) from session history.
     Returns geometric status and τ_sec value.
@@ -596,13 +596,19 @@ def _compute_tau_sec(session_state: dict) -> dict:
         "turns":            n
     }
 
-def _update_session_geometry(session_key: str, z_t: list, sessions: dict) -> dict:
-    """Update session geometric state with new security state vector."""
+def _update_session_geometry(session_key: str, z_t: list, sessions: dict, prompt_text: str = "") -> dict:
+    """Update session geometric state with new security state vector and embedding drift."""
     if session_key not in sessions:
         sessions[session_key] = {"z_history": [], "tau_history": [], "embeddings": [], "emb_mean": None, "emb_cov": None}
     sess = sessions[session_key]
     sess["z_history"].append(z_t)
-    geo = _compute_tau_sec(sess)
+    emb_drift = 0.0
+    if prompt_text:
+        emb = _get_embedding(prompt_text)
+        if emb is not None:
+            sess["embeddings"].append(emb)
+            emb_drift = _mahalanobis_drift(sess["embeddings"])
+    geo = _compute_tau_sec(sess, emb_drift=emb_drift)
     sess["tau_history"].append(geo.get("tau_sec"))
     return geo
 
