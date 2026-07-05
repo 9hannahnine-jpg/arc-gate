@@ -549,7 +549,7 @@ def _compute_tau_sec(session_state: dict, emb_drift: float = 0.0) -> dict:
         deltas.append(_weighted_dist(history[i], history[i-1]))
 
     # Local stability: ratio of previous to current drift
-    delta_curr = deltas[-1] + 1e-8
+    delta_curr = deltas[-1] + 1e-8 + (emb_drift * 0.3)  # blend embedding drift into geometric signal
     delta_prev = deltas[-2] + 1e-8 if len(deltas) >= 2 else delta_curr
     S_local = delta_prev / delta_curr
 
