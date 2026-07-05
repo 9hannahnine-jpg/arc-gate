@@ -3848,7 +3848,7 @@ async def proxy(request: Request, path: str,
             _GEO_STATUS  = _GEO_DATA.get("geometric_status", "insufficient_history")
 
             # Block on geometric adversarial drift
-            if _GEO_STATUS == "adversarial" and _z_current_signal >= _GEOMETRIC_CURRENT_SIGNAL_FLOOR:
+            if _GEO_STATUS == "adversarial" and (_z_current_signal >= _GEOMETRIC_CURRENT_SIGNAL_FLOOR or (_GEO_DATA.get("tau_sec") or 999) < 0.85):
                 print('[TRACE] saving trace for', did)
                 save_trace(did, version, str(uuid.uuid4())[:8],
                     (body_dict.get('messages') or [{}])[-1].get('content','')[:500] if is_json else '',
