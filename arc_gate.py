@@ -2662,7 +2662,7 @@ async def signup_page():
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 body{background:#0a0e14;color:#e2e8f0;font-family:'IBM Plex Sans',sans-serif;font-size:14px;min-height:100vh;display:flex;align-items:center;justify-content:center;}
-.box{width:440px;padding:48px;border:1px solid #1e2a3a;background:#111620;}
+.box{width:440px;padding:48px;border:1px solid #1e2a3a;background:#111620;position:relative;}.box::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#3b82f6,#8b5cf6);}
 .logo{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.12em;margin-bottom:32px;}
 .logo span{color:#3b82f6;}
 h1{font-family:'IBM Plex Mono',monospace;font-size:24px;font-weight:600;margin-bottom:8px;}
