@@ -2668,7 +2668,7 @@ body{background:#0a0e14;color:#e2e8f0;font-family:'IBM Plex Sans',sans-serif;fon
 h1{font-family:'IBM Plex Mono',monospace;font-size:24px;font-weight:600;margin-bottom:8px;}
 .sub{font-size:13px;color:#7c8fa6;margin-bottom:32px;line-height:1.7;}
 label{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.15em;text-transform:uppercase;color:#3d5068;display:block;margin-bottom:6px;}
-input{width:100%;background:#161d2a;border:1px solid #1e2a3a;color:#e2e8f0;font-family:'IBM Plex Mono',monospace;font-size:13px;padding:12px;outline:none;box-sizing:border-box;}
+input{width:100%;background:#f0f4f8;border:1px solid #1e2a3a;color:#0a0e14;font-family:'IBM Plex Mono',monospace;font-size:13px;padding:12px;outline:none;box-sizing:border-box;}
 input:focus{border-color:#3b82f6;}
 .btn{width:100%;padding:12px;background:#3b82f6;color:#fff;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.08em;border:none;cursor:pointer;margin-top:16px;}
 .btn:hover{background:#60a5fa;}
