@@ -2679,7 +2679,7 @@ input:focus{border-color:#3b82f6;}
 </head>
 <body>
 <div class="box">
-  <div class="logo">BENDEX<span>.</span>ARC</div>
+  <div class="logo">BENDEX<span style="color:#3b82f6">.</span>ARC</div>
   <h1>Get started free.</h1>
   <p class="sub">Enter your email and get your personal API key instantly. 500 free requests. No credit card.</p>
   <label>Email address</label>
