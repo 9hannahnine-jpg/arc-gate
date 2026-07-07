@@ -468,6 +468,78 @@ TAU_STAR = math.sqrt(3.0 / 2.0)   # ≈ 1.2247 — geometric threshold
 TAU_WARN = TAU_STAR * 1.05         # early warning band above τ*
 T_WINDOW = 6                        # minimum turns before geometric monitoring
 
+# Task-action misalignment detection
+# Measures whether the action being requested is semantically aligned
+# with the established task context (Nine 2026, geometric authority boundary)
+_task_contexts: dict = {}  # session_key -> task context embedding
+
+def _get_embedding_cached(text: str) -> list:
+    """Get OpenAI embedding. Returns None on failure."""
+    try:
+        import urllib.request as _ur, json as _j, os as _os
+        _key = _os.environ.get("OPENAI_API_KEY", "")
+        if not _key or not text:
+            return None
+        _payload = _j.dumps({"input": text[:1000], "model": "text-embedding-3-small"}).encode()
+        _req = _ur.Request(
+            "https://api.openai.com/v1/embeddings",
+            data=_payload,
+            headers={"Authorization": f"Bearer {_key}", "Content-Type": "application/json"}
+        )
+        with _ur.urlopen(_req, timeout=3) as _r:
+            return _j.load(_r)["data"][0]["embedding"]
+    except:
+        return None
+
+def _cosine_similarity(a: list, b: list) -> float:
+    """Compute cosine similarity between two vectors."""
+    try:
+        import numpy as np
+        a, b = np.array(a), np.array(b)
+        denom = np.linalg.norm(a) * np.linalg.norm(b)
+        if denom == 0:
+            return 1.0
+        return float(np.dot(a, b) / denom)
+    except:
+        return 1.0
+
+def _compute_task_action_misalignment(
+    session_key: str,
+    task_text: str,
+    action_text: str
+) -> float:
+    """
+    Compute task-action misalignment score M = 1 - cosine_similarity(C, A).
+    C = task context embedding (what the agent is supposed to do)
+    A = action request embedding (what the content is asking the agent to do)
+    Returns misalignment score 0-1. High score = action is far from task.
+    """
+    global _task_contexts
+    try:
+        # Build task context on first call for this session
+        if session_key not in _task_contexts and task_text:
+            emb = _get_embedding_cached(task_text)
+            if emb:
+                _task_contexts[session_key] = emb
+                # Prune old contexts
+                if len(_task_contexts) > 1000:
+                    keys = list(_task_contexts.keys())
+                    for k in keys[:-500]:
+                        del _task_contexts[k]
+
+        if session_key not in _task_contexts:
+            return 0.0  # No context yet, can't compute misalignment
+
+        action_emb = _get_embedding_cached(action_text)
+        if action_emb is None:
+            return 0.0
+
+        sim = _cosine_similarity(_task_contexts[session_key], action_emb)
+        misalignment = 1.0 - sim
+        return round(misalignment, 4)
+    except:
+        return 0.0
+
 def _get_embedding(text: str) -> list:
     """Get OpenAI embedding for a prompt. Returns None on failure."""
     try:
@@ -3445,6 +3517,48 @@ async def proxy(request: Request, path: str,
             _authority_session_key = (_explicit_authority_session_id or f"request:{uuid.uuid4()}")[:128]
             _authority_state = _get_authority_state(_authority_session_key, persist=_authority_session_persisted)
             _authority_decision = _authority_state.process_turn(_authority_text, _authority_source)
+
+            # Task-action misalignment detection (Nine 2026)
+            # Only runs on untrusted sources with sufficient content
+            _arc_source_type = (request.headers.get("x-arc-source-type") or "").strip().lower()
+            if (
+                _arc_source_type in {"tool_output", "email", "retrieved_document", "webpage", "document"}
+                and len(_authority_text) > 80
+                and is_json
+            ):
+                _task_msg = next(
+                    (m.get("content", "") for m in (body_dict.get("messages") or [])
+                     if m.get("role") == "user" and m.get("content")),
+                    ""
+                )
+                _misalignment = _compute_task_action_misalignment(
+                    _authority_session_key,
+                    _task_msg,
+                    _authority_text
+                )
+                if _misalignment > 0.72:
+                    save_trace(did, version, str(uuid.uuid4())[:8],
+                        _authority_text[:500], '[BLOCKED]', 0, 0, 0.0, 0.0,
+                        'blocked_task_action_misalignment', 0.0, time.time())
+                    return JSONResponse(status_code=200, content={
+                        "id":"blocked","object":"chat.completion",
+                        "choices":[{"index":0,"message":{"role":"assistant",
+                            "content":"[BLOCKED by Arc Gate — task-action misalignment detected]"},
+                            "finish_reason":"stop"}],
+                        "model": body_dict.get("model","unknown"),
+                        "arc_sentry": _arc_sentry_response(
+                            blocked=True, decision="blocked",
+                            layer="task_action_misalignment",
+                            reason="semantic_action_drift",
+                            severity="high",
+                            confidence=round(_misalignment, 4),
+                            triggered_layers=[{"layer":"task_action_misalignment",
+                                "signal":"semantic_action_drift",
+                                "score":round(_misalignment, 4)}],
+                            policy_mode_override=_request_policy_mode,
+                        )
+                    })
+
             _arc_source_type = (request.headers.get("x-arc-source-type") or "").strip().lower().replace("-", "_")
             if (
                 _authority_source == ContentSource.TOOL_OUTPUT
