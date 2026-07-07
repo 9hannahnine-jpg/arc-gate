@@ -3537,7 +3537,7 @@ async def proxy(request: Request, path: str,
                     _task_msg,
                     _authority_text
                 )
-                if _misalignment > 0.72:
+                if False and _misalignment > 0.72:  # disabled — needs deployment calibration
                     save_trace(did, version, str(uuid.uuid4())[:8],
                         _authority_text[:500], '[BLOCKED]', 0, 0, 0.0, 0.0,
                         'blocked_task_action_misalignment', 0.0, time.time())
@@ -4073,7 +4073,7 @@ async def proxy(request: Request, path: str,
                     print(f"[MAHAL] High score {_mahal_score_log:.2f} for prompt: {prompt_text[:60]}")
                     # Block on untrusted sources with high Mahalanobis anomaly
                     _mahal_source = (request.headers.get("x-arc-source-type") or "").strip().lower()
-                    if False and _mahal_source in {"tool_output", "email", "retrieved_document", "webpage", "document"} and _mahal_score_log > 50.0:  # disabled — threshold calibration needed
+                    if _mahal_source in {"tool_output", "email", "retrieved_document", "webpage", "document"} and _mahal_score_log > 50.0:
                         save_trace(did, version, str(uuid.uuid4())[:8],
                             prompt_text[:500], '[BLOCKED]', 0, 0, 0.0, 0.0,
                             'blocked_mahalanobis', 0.0, time.time())
