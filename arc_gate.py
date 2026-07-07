@@ -4063,14 +4063,38 @@ async def proxy(request: Request, path: str,
                         # AMBIGUOUS — restricted_continue: forward but flag
                         print(f"[JUDGE] Restricted continue: AMBIGUOUS — {prompt_text[:60]}")
                         _RESTRICTED_CONTINUE = True
-        # Layer 0.5: Mahalanobis geometric filter — LOG ONLY, not blocking
-        # Disabled as blocking layer until domain-specific centroid is calibrated
+        # Layer 0.5: Mahalanobis geometric filter
+        # Blocks on untrusted sources with high anomaly score
         _mahal_score_log = 0.0
         if _mahal_filter is not None:
             try:
                 _mahal_score_log = _mahal_filter.score(prompt_text)
                 if _mahal_score_log > 35.0:
                     print(f"[MAHAL] High score {_mahal_score_log:.2f} for prompt: {prompt_text[:60]}")
+                    # Block on untrusted sources with high Mahalanobis anomaly
+                    _mahal_source = (request.headers.get("x-arc-source-type") or "").strip().lower()
+                    if _mahal_source in {"tool_output", "email", "retrieved_document", "webpage", "document"} and _mahal_score_log > 50.0:
+                        save_trace(did, version, str(uuid.uuid4())[:8],
+                            prompt_text[:500], '[BLOCKED]', 0, 0, 0.0, 0.0,
+                            'blocked_mahalanobis', 0.0, time.time())
+                        return JSONResponse(status_code=200, content={
+                            "id":"blocked","object":"chat.completion",
+                            "choices":[{"index":0,"message":{"role":"assistant",
+                                "content":"[BLOCKED by Arc Gate — geometric anomaly detected]"},
+                                "finish_reason":"stop"}],
+                            "model": body_dict.get("model","unknown"),
+                            "arc_sentry": _arc_sentry_response(
+                                blocked=True, decision="blocked",
+                                layer="mahalanobis_geometric",
+                                reason="semantic_anomaly_detected",
+                                severity="high",
+                                confidence=round(min(_mahal_score_log/100, 1.0), 4),
+                                triggered_layers=[{"layer":"mahalanobis_geometric",
+                                    "signal":"semantic_anomaly",
+                                    "score":round(_mahal_score_log, 2)}],
+                                policy_mode_override=_request_policy_mode,
+                            )
+                        })
             except Exception as _me:
                 print(f"[MAHAL] score error: {_me}")
         geo_blocked, fr_z, fr_dist = (False, 0.0, 0.0) if _benign_bypass else geo_check_prompt(prompt_text, session_key=_incoming_token)
