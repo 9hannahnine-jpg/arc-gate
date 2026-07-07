@@ -486,9 +486,10 @@ def _get_embedding_cached(text: str) -> list:
             data=_payload,
             headers={"Authorization": f"Bearer {_key}", "Content-Type": "application/json"}
         )
-        with _ur.urlopen(_req, timeout=3) as _r:
+        with _ur.urlopen(_req, timeout=8) as _r:
             return _j.load(_r)["data"][0]["embedding"]
-    except:
+    except Exception as _e:
+        print(f"[GEO] embedding failed: {_e}")
         return None
 
 def _cosine_similarity(a: list, b: list) -> float:
