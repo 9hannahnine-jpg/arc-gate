@@ -4464,6 +4464,8 @@ async def proxy(request: Request, path: str,
             "a_fr":             _GEO_DATA.get("a_fr"),
             "turns":            _GEO_DATA.get("turns", 0),
             "threshold_crossed": (_GEO_DATA.get("tau_sec") or 999) < TAU_STAR,
+            "meta_rate":        _GEO_DATA.get("meta_rate"),
+            "memory_integral":  _GEO_DATA.get("memory_integral"),
         }
         if _AUTHORITY_DATA:
             _geo_extra.update(_AUTHORITY_DATA)
