@@ -650,17 +650,41 @@ def _compute_tau_sec(session_state: dict, emb_drift: float = 0.0) -> dict:
     v_fr = deltas[-1]
     a_fr = deltas[-1] - deltas[-2] if len(deltas) >= 2 else 0.0
 
-    # Geometric decision
+    # Meta rate M(τ) = -6(3 - 2τ²) / τ⁵ — Nine (2026) Paper 3, Section 5
+    # M(τ) > 0 while τ > τ* means system is accelerating toward instability
+    # This is an EARLIER warning than τ crossing τ* itself
+    if tau_sec > 0:
+        meta_rate = -6.0 * (3.0 - 2.0 * tau_sec**2) / (tau_sec**5)
+    else:
+        meta_rate = 0.0
+
+    # Cumulative memory M(T) = ∫D(t)dt — Nine (2026) Paper 2
+    # Accumulated structural instability across the session
+    tau_history = session_state.get("tau_history", [])
+    if len(tau_history) >= 2:
+        # Approximate integral using trapezoid rule on lambda values
+        lambda_vals = [3.0/t**2 - 2.0 if t and t > 0 else 0.0 for t in tau_history if t]
+        memory_integral = sum(lambda_vals) / max(len(lambda_vals), 1)
+    else:
+        memory_integral = 0.0
+
+    # Geometric decision — enhanced with meta rate early warning
     if tau_sec > TAU_WARN:
         status = "stable"
     elif tau_sec > TAU_STAR:
-        status = "warning"       # approaching τ* — early warning
+        # Warning band — check meta rate for acceleration toward instability
+        if meta_rate > 0.5:
+            status = "meta_warning"  # accelerating toward τ* even while still above it
+        else:
+            status = "warning"       # approaching τ* — early warning
     else:
         status = "adversarial"   # crossed τ* — adversarial drift
 
     return {
         "tau_sec":          round(tau_sec, 6),
         "tau_star":         round(TAU_STAR, 6),
+        "meta_rate":        round(meta_rate, 6),
+        "memory_integral":  round(memory_integral, 6),
         "geometric_status": status,
         "D_sec":            round(D_sec, 6),
         "lambda_sec":       round(lambda_sec, 6),
@@ -3961,6 +3985,41 @@ async def proxy(request: Request, path: str,
                 for k in sorted(_geo_sessions.keys())[:-1000]:
                     del _geo_sessions[k]
             _GEO_STATUS  = _GEO_DATA.get("geometric_status", "insufficient_history")
+
+            # Meta rate early warning block — fires BEFORE τ crosses τ*
+            # M(τ) > 0 while τ > τ* means the session is accelerating toward instability
+            # Nine (2026) Paper 3, Section 5.3
+            _meta_rate = _GEO_DATA.get("meta_rate", 0.0)
+            _tau_current = _GEO_DATA.get("tau_sec") or 999
+            _memory = _GEO_DATA.get("memory_integral", 0.0)
+            if (
+                _GEO_STATUS in ("meta_warning", "warning")
+                and _meta_rate > 1.0
+                and _tau_current < TAU_STAR * 1.15
+                and _z_current_signal >= _GEOMETRIC_CURRENT_SIGNAL_FLOOR * 0.5
+            ):
+                print(f"[META] Meta rate early warning: M(τ)={_meta_rate:.4f} τ={_tau_current:.4f}")
+                save_trace(did, version, str(uuid.uuid4())[:8],
+                    (body_dict.get('messages') or [{}])[-1].get('content','')[:500] if is_json else '',
+                    '[BLOCKED]', 0, 0, 0.0, 0.0, 'blocked_meta_rate', 0.0, time.time())
+                return JSONResponse(status_code=200, content={
+                    "id":"blocked","object":"chat.completion",
+                    "choices":[{"index":0,"message":{"role":"assistant",
+                        "content":"[BLOCKED by Arc Gate — meta rate early warning: session accelerating toward instability]"},
+                        "finish_reason":"stop"}],
+                    "model": body_dict.get("model","unknown"),
+                    "arc_sentry": _arc_sentry_response(
+                        blocked=True, decision="blocked",
+                        layer="meta_rate_geometric",
+                        reason="session_accelerating_toward_instability",
+                        severity="high",
+                        confidence=round(min(abs(_meta_rate)/5.0, 1.0), 4),
+                        triggered_layers=[{"layer":"meta_rate_geometric",
+                            "signal":"meta_rate_early_warning",
+                            "score":round(_meta_rate, 4)}],
+                        policy_mode_override=_request_policy_mode,
+                    )
+                })
 
             # Block on geometric adversarial drift
             if _GEO_STATUS == "adversarial" and (_z_current_signal >= _GEOMETRIC_CURRENT_SIGNAL_FLOOR or (_GEO_DATA.get("tau_sec") or 999) < 1.22):
