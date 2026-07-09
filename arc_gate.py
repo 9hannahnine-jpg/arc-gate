@@ -3993,10 +3993,10 @@ async def proxy(request: Request, path: str,
             _tau_current = _GEO_DATA.get("tau_sec") or 999
             _memory = _GEO_DATA.get("memory_integral", 0.0)
             if (
-                _GEO_STATUS in ("meta_warning", "warning")
-                and _meta_rate > 1.0
-                and _tau_current < TAU_STAR * 1.15
-                and _z_current_signal >= _GEOMETRIC_CURRENT_SIGNAL_FLOOR * 0.5
+                _GEO_STATUS in ("meta_warning", "warning", "stable")
+                and _meta_rate > 0.5
+                and _tau_current < TAU_STAR * 2.0
+                and _z_current_signal >= _GEOMETRIC_CURRENT_SIGNAL_FLOOR * 0.3
             ):
                 print(f"[META] Meta rate early warning: M(τ)={_meta_rate:.4f} τ={_tau_current:.4f}")
                 save_trace(did, version, str(uuid.uuid4())[:8],
