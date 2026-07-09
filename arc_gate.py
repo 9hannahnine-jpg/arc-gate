@@ -3989,14 +3989,14 @@ async def proxy(request: Request, path: str,
             # Meta rate early warning block — fires BEFORE τ crosses τ*
             # M(τ) > 0 while τ > τ* means the session is accelerating toward instability
             # Nine (2026) Paper 3, Section 5.3
-            _meta_rate = _GEO_DATA.get("meta_rate", 0.0)
+            _meta_rate = _GEO_DATA.get("meta_rate", 0.0) or 0.0
             _tau_current = _GEO_DATA.get("tau_sec") or 999
-            _memory = _GEO_DATA.get("memory_integral", 0.0)
-            if (
+            _memory = _GEO_DATA.get("memory_integral", 0.0) or 0.0
+            if False and (
                 _GEO_STATUS in ("meta_warning", "warning", "stable")
                 and _meta_rate > 0.5
                 and _tau_current < TAU_STAR * 2.0
-            ):
+            ):  # disabled until stable — meta rate tracked in response only
                 print(f"[META] Meta rate early warning: M(τ)={_meta_rate:.4f} τ={_tau_current:.4f}")
                 save_trace(did, version, str(uuid.uuid4())[:8],
                     (body_dict.get('messages') or [{}])[-1].get('content','')[:500] if is_json else '',
