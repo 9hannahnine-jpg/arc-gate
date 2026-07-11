@@ -474,7 +474,8 @@ T_WINDOW = 6                        # minimum turns before geometric monitoring
 _task_contexts: dict = {}  # session_key -> task context embedding
 
 def _get_embedding_cached(text: str) -> list:
-    """Get OpenAI embedding. Returns None on failure."""
+    """Get OpenAI embedding. Disabled — too slow for inline use."""
+    return None
     try:
         import urllib.request as _ur, json as _j, os as _os
         _key = _os.environ.get("OPENAI_API_KEY", "")
