@@ -543,6 +543,7 @@ def _compute_task_action_misalignment(
         return 0.0
 
 def _get_embedding(text: str) -> list:
+    return None  # disabled — too slow for inline use
     """Get OpenAI embedding for a prompt. Returns None on failure."""
     try:
         import urllib.request as _ur, json as _j, os as _os
