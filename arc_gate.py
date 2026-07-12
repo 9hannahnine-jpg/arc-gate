@@ -3868,11 +3868,8 @@ async def proxy(request: Request, path: str,
             })
         # Compute mahal score for logging (always, even if not blocked)
         _mahal_score = 0.0
-        if _mahal_filter is not None:
-            try:
-                _mahal_score = _mahal_filter.score(prompt_text)
-            except Exception as _me:
-                print(f"[MF] score error: {_me}")
+        # Mahalanobis filter disabled — CPU inference too slow (4-5s per request)
+        _mahal_score = 0.0
         # Multilingual injection check for untrusted sources
         _source_type = request.headers.get("x-arc-source-type", "").lower()
         _untrusted_sources = {"tool_output", "webpage", "email", "document", "rag_result", "external"}
@@ -4141,12 +4138,11 @@ async def proxy(request: Request, path: str,
         # Layer 0.5: Mahalanobis geometric filter
         # Blocks on untrusted sources with high anomaly score
         _mahal_score_log = 0.0
-        if _mahal_filter is not None:
+        if False and _mahal_filter is not None:  # disabled — CPU inference too slow
             try:
                 _mahal_score_log = _mahal_filter.score(prompt_text)
                 if _mahal_score_log > 35.0:
                     print(f"[MAHAL] High score {_mahal_score_log:.2f} for prompt: {prompt_text[:60]}")
-                    # Block on untrusted sources with high Mahalanobis anomaly
                     _mahal_source = (request.headers.get("x-arc-source-type") or "").strip().lower()
                     if False and _mahal_source in {"tool_output", "email", "retrieved_document", "webpage", "document"} and _mahal_score_log > 50.0:  # disabled — needs deployment calibration
                         save_trace(did, version, str(uuid.uuid4())[:8],
