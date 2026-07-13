@@ -423,9 +423,11 @@ async function sendCustomTurn() {
 
    row.className = 'c-turn ' + (blocked ? 'c-turn-blocked' : decision === 'monitor' ? 'c-turn-monitor' : 'c-turn-pass');
    row.querySelector('.c-status').textContent = blocked ? '⛔ BLOCKED' : decision === 'monitor' ? '⚠ MONITOR' : '✓ PASS';
-   const authDecision = arc.authority_decision || decision;
+   const authDecision = arc.authority_decision || (blocked ? 'block' : decision);
     const authRisk = Math.round((arc.authority_session_risk || 0) * 100);
-    row.querySelector('.c-risk').textContent = 'auth: ' + authDecision + ' (' + authRisk + '%)';
+    const trigScore = arc.triggered_layers && arc.triggered_layers.length > 0 ? Math.round(arc.triggered_layers[0].score * 100) : authRisk;
+    const displayRisk = blocked ? Math.max(trigScore, 80) : authRisk;
+    row.querySelector('.c-risk').textContent = 'auth: ' + authDecision + ' (' + displayRisk + '%)';
 
 
    if (blocked) {
