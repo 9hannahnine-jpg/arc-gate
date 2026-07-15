@@ -160,6 +160,14 @@ _POLICY_CONFIGS = {
         "probe_threshold":       0.65,
         "description":           "Balanced protection and usability. Recommended for most deployments."
     },
+    "geo_only": {
+        "svm_block_threshold":   1.01,
+        "svm_judge_threshold":   1.01,
+        "phrase_enabled":        False,
+        "geo_enabled":           True,
+        "probe_threshold":       1.01,
+        "description":           "Geometric layer only for research validation"
+    },
     "research": {
         "svm_block_threshold":   0.85,   # only block high-confidence attacks
         "svm_judge_threshold":   0.50,   # route most things to judge
