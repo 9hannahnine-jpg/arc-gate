@@ -3978,7 +3978,7 @@ async def proxy(request: Request, path: str,
                         )
                     })
 
-        if not _benign_bypass:
+        if True:  # geometric always runs regardless of benign bypass
             # ── Geometric Session Monitor (Nine 2026, Paper 7) ──────
             # Build security state vector z_t from current turn signals
             _z_classifier  = _tfidf_result.get("score", 0.0)
