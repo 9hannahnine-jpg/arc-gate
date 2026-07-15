@@ -606,7 +606,7 @@ def _weighted_dist(z1: list, z2: list) -> float:
     """Weighted Euclidean distance between security state vectors."""
     return math.sqrt(sum(_W[i] * (z1[i] - z2[i])**2 for i in range(len(_W))))
 
-def _compute_tau_sec(session_state: dict, emb_drift: float = 0.0) -> dict:
+def _compute_tau_sec(session_state: dict, emb_drift: float = 0.0, t_window_override: int = None) -> dict:
     """
     Compute τ_sec(t) from session history.
     Returns geometric status and τ_sec value.
@@ -615,7 +615,8 @@ def _compute_tau_sec(session_state: dict, emb_drift: float = 0.0) -> dict:
     history = session_state.get("z_history", [])
     n = len(history)
 
-    if n < T_WINDOW:
+    _effective_window = t_window_override if t_window_override is not None else T_WINDOW
+    if n < _effective_window:
         return {
             "tau_sec": None,
             "geometric_status": "insufficient_history",
@@ -645,7 +646,7 @@ def _compute_tau_sec(session_state: dict, emb_drift: float = 0.0) -> dict:
 
     # λ_sec = D_sec / (Δt - T) — Paper 3 eigenvalue estimate
     delta_t  = n
-    T        = T_WINDOW
+    T        = _effective_window
     denom    = max(delta_t - T, 1)
     lambda_sec = D_sec / denom
 
@@ -703,7 +704,7 @@ def _compute_tau_sec(session_state: dict, emb_drift: float = 0.0) -> dict:
         "turns":            n
     }
 
-def _update_session_geometry(session_key: str, z_t: list, sessions: dict, prompt_text: str = "") -> dict:
+def _update_session_geometry(session_key: str, z_t: list, sessions: dict, prompt_text: str = "", t_window: int = None) -> dict:
     """Update session geometric state with new security state vector and embedding drift."""
     if session_key not in sessions:
         sessions[session_key] = {"z_history": [], "tau_history": [], "embeddings": [], "emb_mean": None, "emb_cov": None}
@@ -715,7 +716,7 @@ def _update_session_geometry(session_key: str, z_t: list, sessions: dict, prompt
         if emb is not None:
             sess["embeddings"].append(emb)
             emb_drift = _mahalanobis_drift(sess["embeddings"])
-    geo = _compute_tau_sec(sess, emb_drift=emb_drift)
+    geo = _compute_tau_sec(sess, emb_drift=emb_drift, t_window_override=t_window)
     sess["tau_history"].append(geo.get("tau_sec"))
     return geo
 
@@ -3978,7 +3979,7 @@ async def proxy(request: Request, path: str,
                         )
                     })
 
-        if True:  # geometric always runs regardless of benign bypass
+        if not _benign_bypass:
             # ── Geometric Session Monitor (Nine 2026, Paper 7) ──────
             # Build security state vector z_t from current turn signals
             _z_classifier  = _tfidf_result.get("score", 0.0)
@@ -3996,9 +3997,10 @@ async def proxy(request: Request, path: str,
             _z_t = _compute_z(_z_classifier, _z_authority, _z_tool,
                               _z_role, _z_secret, _z_intent, _z_judge)
 
+            _t_window_override = 3 if _request_policy_mode == "geo_only" else T_WINDOW
             _session_key = session_id or hdrs.get("authorization","unknown")[:32]
             _prompt_text = (body_dict.get("messages") or [{}])[-1].get("content", "")[:500] if is_json else ""
-            _GEO_DATA    = _update_session_geometry(_session_key, _z_t, _geo_sessions, prompt_text=_prompt_text)
+            _GEO_DATA    = _update_session_geometry(_session_key, _z_t, _geo_sessions, prompt_text=_prompt_text, t_window=_t_window_override)
             if len(_geo_sessions) > 1000:
                 for k in sorted(_geo_sessions.keys())[:-1000]:
                     del _geo_sessions[k]
