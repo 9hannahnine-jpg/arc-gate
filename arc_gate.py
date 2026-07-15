@@ -3915,10 +3915,8 @@ async def proxy(request: Request, path: str,
                     }
                 })
 
-        # Early geometry accumulation — runs on every turn regardless of block
-        _early_session_key = session_id or hdrs.get("authorization","unknown")[:32]
-        _early_prompt_text = (body_dict.get("messages") or [{}])[-1].get("content", "")[:500] if is_json else ""
-        _update_session_geometry(_early_session_key, [0.0]*7, _geo_sessions, prompt_text=_early_prompt_text)
+        # Early geometry accumulation disabled — zero vectors corrupt tau computation
+        pass
 
         # Layer 0b: TF-IDF classifier (high-coverage, CPU-friendly)
         _benign_bypass = _matches_benign_bypass(prompt_text)
