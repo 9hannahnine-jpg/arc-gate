@@ -551,12 +551,13 @@ def _compute_task_action_misalignment(
         return 0.0
 
 def _get_embedding(text: str) -> list:
-    """Get local MiniLM embedding. Fast — no API call, ~5ms on CPU."""
+    """Get local MiniLM raw embedding. Fast — no API call, ~5ms on CPU."""
     try:
-        dist = response_to_dist(text)
-        if dist is None:
+        model = get_embed_model()
+        if model is None or not text:
             return None
-        return dist.tolist()
+        emb = model.encode([text[:500]], convert_to_numpy=True)[0]
+        return emb.tolist()
     except:
         return None
     """Get OpenAI embedding for a prompt. Returns None on failure."""
