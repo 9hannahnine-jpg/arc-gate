@@ -482,8 +482,8 @@ T_WINDOW = 6                        # minimum turns before geometric monitoring
 _task_contexts: dict = {}  # session_key -> task context embedding
 
 def _get_embedding_cached(text: str) -> list:
-    """Get OpenAI embedding. Disabled — too slow for inline use."""
-    return None
+    """Get local MiniLM embedding. Fast — no API call."""
+    return _get_embedding(text)
     try:
         import urllib.request as _ur, json as _j, os as _os
         _key = _os.environ.get("OPENAI_API_KEY", "")
@@ -551,7 +551,14 @@ def _compute_task_action_misalignment(
         return 0.0
 
 def _get_embedding(text: str) -> list:
-    return None  # disabled — too slow for inline use
+    """Get local MiniLM embedding. Fast — no API call, ~5ms on CPU."""
+    try:
+        dist = response_to_dist(text)
+        if dist is None:
+            return None
+        return dist.tolist()
+    except:
+        return None
     """Get OpenAI embedding for a prompt. Returns None on failure."""
     try:
         import urllib.request as _ur, json as _j, os as _os
